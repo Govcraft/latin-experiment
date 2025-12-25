@@ -4,9 +4,8 @@
   title: [Emergent Coordination in Multi-Agent Systems via Gradient Fields and Temporal Decay],
   authors: (
     (
-      name: "Anonymous",
-      affiliation: "Anonymous Institution",
-      email: "anonymous@example.com",
+      name: "Roland Rodriguez",
+      affiliation: "Independent Researcher",
     ),
   ),
   abstract: [
@@ -57,99 +56,153 @@ Our contributions:
 
 = Problem Formulation
 
-== Artifacts and Regions
+We formalize artifact refinement as a dynamical system over a pressure landscape rather than an optimization problem with a target state. The system evolves through local actions and continuous decay, settling into stable basins that represent acceptable artifact states.
 
-Let $cal(A)$ denote an *artifact*: a structured object that can be decomposed into *regions* $cal(R) = {r_1, ..., r_n}$. Each region $r_i$ has content $c_i$ and kind $k_i$. Examples include:
-- Documents: regions are paragraphs or spans
-- Source code: regions are functions or modules
-- Configurations: regions are sections or key-value pairs
+== State Space
 
-== Signals and Pressures
+An *artifact* consists of $n$ regions with content $c_i in cal(C)$ for $i in {1, ..., n}$, where $cal(C)$ is an arbitrary content space (strings, AST nodes, etc.). Each region also carries auxiliary state $h_i in cal(H)$ representing confidence, fitness, and history.
 
-A *sensor* $s: cal(R) -> RR^d$ maps regions to measurable *signals*. Signals capture local properties: parse confidence, style distance, test coverage, lint density.
+The full system state is:
+$ s = ((c_1, h_1), ..., (c_n, h_n)) in (cal(C) times cal(H))^n $
 
-A *pressure function* $p: RR^d -> RR_(>=0)$ computes scalar "badness" from signals. Higher pressure indicates the region needs attention. We define the *pressure vector* for region $r$:
+== Pressure Landscape
 
-$ bold(p)(r) = (p_1(s(r)), ..., p_k(s(r))) $
+A *signal function* $sigma: cal(C) -> RR^d$ maps content to measurable features. Signals are *local*: $sigma(c_i)$ depends only on region $i$.
 
-The *total weighted pressure* is:
+A *pressure function* $phi: RR^d -> RR_(>=0)$ maps signals to scalar "badness." We consider $k$ pressure axes with weights $bold(w) in RR^k_(>0)$. The *region pressure* is:
 
-$ P(r) = sum_(j=1)^k w_j p_j(s(r)) $
+$ P_i(s) = sum_(j=1)^k w_j phi_j (sigma(c_i)) $
 
-where $bold(w)$ are configurable weights.
+The *artifact pressure* is:
 
-== Actors and Patches
+$ P(s) = sum_(i=1)^n P_i(s) $
 
-An *actor* $a$ proposes *patches* $delta$ that modify region content. Each patch has an *expected improvement* $Delta_a(delta)$ predicting pressure reduction.
+This defines a landscape over artifact states. Low-pressure regions are "valleys" where the artifact satisfies quality constraints.
 
-== The Coordination Problem
+== System Dynamics
 
-Given an artifact $cal(A)$ with initial pressure $P_0 = sum_i P(r_i)$, find a sequence of patches that drives total pressure below threshold $tau$, minimizing total patches applied.
+The system evolves in discrete time steps (ticks). Each tick consists of three phases:
 
-The naive approach—a central planner selecting globally optimal patches—requires $O(n dot m)$ evaluations per step ($n$ regions, $m$ actors). We seek a decentralized scheme where agents make $O(1)$ local decisions.
+*Phase 1: Decay.* Auxiliary state erodes toward a baseline. For fitness $f_i$ and confidence $gamma_i$ components of $h_i$:
+
+$ f_i^(t+1) = f_i^t dot.c e^(-lambda_f) , quad gamma_i^(t+1) = gamma_i^t dot.c e^(-lambda_gamma) $
+
+where $lambda_f, lambda_gamma > 0$ are decay rates. Decay ensures that stability requires continuous reinforcement.
+
+*Phase 2: Action.* For each region $i$ where pressure exceeds activation threshold ($P_i > tau_"act"$) and the region is not inhibited, an *actor* $a: cal(C) times cal(H) times RR^d -> cal(C)$ proposes a content transformation. The actor observes only local state $(c_i, h_i, sigma(c_i))$.
+
+*Phase 3: Reinforcement.* Regions where actions were applied receive fitness and confidence boosts, and enter an inhibition period preventing immediate re-modification:
+
+$ f_i^(t+1) = min(f_i^t + Delta_f, 1), quad gamma_i^(t+1) = min(gamma_i^t + Delta_gamma, 1) $
+
+== Stable Basins
+
+#definition(name: "Stability")[
+  A state $s^*$ is *stable* if, under the system dynamics with no external perturbation:
+  1. All region pressures are below activation threshold: $P_i(s^*) < tau_"act"$ for all $i$
+  2. Decay is balanced by residual fitness: the system remains in a neighborhood of $s^*$
+]
+
+The central questions are:
+1. *Existence*: Under what conditions do stable basins exist?
+2. *Quality*: What is the pressure $P(s^*)$ of states in stable basins?
+3. *Convergence*: From initial state $s_0$, does the system reach a stable basin? How quickly?
+4. *Decentralization*: Can stability be achieved with purely local decisions?
+
+== The Locality Constraint
+
+The key constraint distinguishing our setting from centralized optimization: agents observe only local state. An actor at region $i$ sees $(c_i, h_i, sigma(c_i))$ but not:
+- Other regions' content $c_j$ for $j != i$
+- Global pressure $P(s)$
+- Other agents' actions
+
+This rules out coordinated planning. Stability must emerge from local incentives aligned with global pressure reduction.
 
 = Method
 
-== Gradient-Field Coordination
+We now present a coordination mechanism that achieves stability through purely local decisions. The key insight is that under appropriate conditions, the artifact pressure $P(s)$ acts as a *potential function*: local improvements by individual agents decrease global pressure, guaranteeing convergence without coordination.
 
-Our key insight: if pressure functions are designed such that *local improvement implies global improvement in expectation*, agents can act greedily without coordination.
+== Pressure Alignment
+
+The locality constraint prohibits agents from observing global state. For decentralized coordination to succeed, we need local incentives to align with global pressure reduction.
 
 #definition(name: "Pressure Alignment")[
-  A pressure system is *aligned* if for any region $r$ and patch $delta$ with positive expected improvement $Delta(delta) > 0$, applying $delta$ reduces total artifact pressure in expectation:
-  $ EE[P(cal(A)') | delta "applied"] < P(cal(A)) $
+  A pressure system is *aligned* if for any region $i$, state $s$, and action $a_i$ that reduces local pressure:
+  $ P_i(s') < P_i(s) quad ==> quad P(s') < P(s) $
+  where $s' = s[c_i |-> a_i(c_i)]$ is the state after applying $a_i$.
 ]
 
-Under alignment, agents need only:
-1. Observe local signals
-2. Compute local pressure
-3. If pressure exceeds threshold, propose patches
-4. Apply highest-scoring patch
+Alignment holds automatically when pressure functions are *separable*: each $P_i$ depends only on $c_i$, so $P(s) = sum_i P_i(s)$ and local improvement directly implies global improvement.
 
-No inter-agent communication is required.
+More generally, alignment holds when cross-region interactions are bounded:
 
-== Temporal Decay
-
-Static pressure fields risk premature convergence: once a region's pressure drops below threshold, it receives no further attention even if the underlying quality is uncertain.
-
-We introduce *decay*: region fitness and confidence erode over time unless reinforced by successful patches.
-
-$ "fitness"(t + Delta t) = "fitness"(t) dot.c exp(-lambda_f Delta t) $
-
-$ "confidence"(t + Delta t) = "confidence"(t) dot.c exp(-lambda_c Delta t) $
-
-where $lambda_f = ln(2) / tau_f$ for half-life $tau_f$.
-
-Decay ensures:
-- Stale regions eventually attract attention
-- Reinforcement from successful patches is required for stability
-- The system "forgets faster than agents can lie"
-
-== The Tick Loop
-
-#algorithm(name: "Gradient-Field Tick")[
-  *Input:* Artifact $cal(A)$, sensors $cal(S)$, actors $cal(B)$, config $theta$ \
-  *Output:* Modified artifact, applied patches
-
-  1. Apply decay to all region states
-  2. For each region $r in cal(A)$:
-     - If inhibited, skip
-     - Measure signals: $bold(s) <- union.big_(s in cal(S)) s(r)$
-     - Compute pressures: $bold(p) <- (p_1(bold(s)), ..., p_k(bold(s)))$
-     - If $P(r) < tau_"act"$, skip
-     - Collect patches: $cal(P) <- union.big_(a in cal(B)) a(r, bold(s), bold(p))$
-  3. Score all patches by expected improvement
-  4. Apply top-$k$ patches
-  5. Reinforce and inhibit patched regions
+#definition(name: "Bounded Coupling")[
+  A pressure system has *$epsilon$-bounded coupling* if for any action $a_i$ on region $i$:
+  $ abs(P_j(s') - P_j(s)) <= epsilon quad forall j != i $
+  That is, modifying region $i$ changes other regions' pressures by at most $epsilon$.
 ]
 
-== Termination Conditions
+Under $epsilon$-bounded coupling with $n$ regions, if a local action reduces $P_i$ by $delta > n epsilon$, then global pressure decreases by at least $delta - n epsilon > 0$.
 
-The system terminates when:
-- All pressure gradients below activation threshold
-- Budget exhausted (max patches or compute time)
-- Improvement rate below threshold (decay outpacing progress)
+== Connection to Potential Games
 
-This is economic termination, not logical completion.
+The aligned pressure system forms a *potential game* where:
+- Players are regions (or agents acting on regions)
+- Strategies are content choices $c_i in cal(C)$
+- The potential function is $Phi(s) = P(s)$
+
+In potential games, any sequence of improving moves converges to a Nash equilibrium. In our setting, Nash equilibria correspond to stable basins: states where no local action can reduce pressure below the activation threshold.
+
+This connection provides our convergence guarantee without requiring explicit coordination.
+
+== The Coordination Algorithm
+
+The tick loop implements greedy local improvement with decay-driven exploration:
+
+#algorithm(name: "Pressure-Field Tick")[
+  *Input:* State $s^t$, signal functions ${sigma_j}$, pressure functions ${phi_j}$, actors ${a_k}$, parameters $(tau_"act", lambda_f, lambda_gamma, Delta_f, Delta_gamma, kappa)$
+
+  *Phase 1: Decay*
+  #h(1em) For each region $i$: $quad f_i <- f_i dot.c e^(-lambda_f), quad gamma_i <- gamma_i dot.c e^(-lambda_gamma)$
+
+  *Phase 2: Activation and Proposal*
+  #h(1em) $cal(P) <- emptyset$
+  #h(1em) For each region $i$ where $P_i(s) >= tau_"act"$ and not inhibited:
+  #h(2em) $bold(sigma)_i <- sigma(c_i)$
+  #h(2em) For each actor $a_k$:
+  #h(3em) $delta <- a_k(c_i, h_i, bold(sigma)_i)$
+  #h(3em) $cal(P) <- cal(P) union {(i, delta, hat(Delta)(delta))}$
+
+  *Phase 3: Selection*
+  #h(1em) Sort $cal(P)$ by predicted improvement $hat(Delta)$
+  #h(1em) Select top-$kappa$ non-conflicting patches
+
+  *Phase 4: Application and Reinforcement*
+  #h(1em) For each selected patch $(i, delta, dot)$:
+  #h(2em) $c_i <- delta(c_i)$
+  #h(2em) $f_i <- min(f_i + Delta_f, 1)$, $gamma_i <- min(gamma_i + Delta_gamma, 1)$
+  #h(2em) Mark region $i$ inhibited for $tau_"inh"$ ticks
+
+  *Return* updated state $s^(t+1)$
+]
+
+The algorithm has three key properties:
+
+*Locality.* Each actor observes only $(c_i, h_i, sigma(c_i))$. No global state is accessed.
+
+*Bounded parallelism.* At most $kappa$ patches per tick prevents thrashing. Inhibition prevents repeated modification of the same region.
+
+*Decay-driven exploration.* Even stable regions eventually decay below confidence thresholds, attracting re-evaluation. This prevents premature convergence to local minima.
+
+== Stability and Termination
+
+The system reaches a stable basin when:
+1. All region pressures satisfy $P_i(s) < tau_"act"$
+2. Decay is balanced: fitness remains above the threshold needed for stability
+
+Termination is *economic*, not logical. The system stops acting when the cost of action (measured in pressure reduction per patch) falls below the benefit. This matches natural systems: activity ceases when gradients flatten, not when an external goal is declared achieved.
+
+In practice, we also impose budget constraints (maximum ticks or patches) to bound computation.
 
 = Theoretical Analysis
 
