@@ -206,25 +206,78 @@ In practice, we also impose budget constraints (maximum ticks or patches) to bou
 
 = Theoretical Analysis
 
+We establish three main results: (1) convergence to stable basins under alignment, (2) bounds on stable basin quality, and (3) scaling properties relative to centralized alternatives.
+
 == Convergence Under Alignment
 
-#theorem(name: "Local Convergence")[
-  Under pressure alignment and bounded decay, the gradient-field tick loop converges to a stable basin in $O(P_0 / (epsilon dot.c "min improvement"))$ ticks, where $epsilon$ is the minimum pressure reduction per patch.
+#theorem(name: "Convergence")[
+  Let the pressure system be aligned with $epsilon$-bounded coupling. Let $delta_"min" > 0$ be the minimum pressure reduction from any applied patch, and assume $delta_"min" > n epsilon$ where $n$ is the number of regions. Then from any initial state $s_0$ with pressure $P_0 = P(s_0)$, the system reaches a stable basin within:
+  $ T <= P_0 / (delta_"min" - n epsilon) $
+  ticks, provided decay rates satisfy $lambda_f, lambda_gamma < delta_"min" "/" tau_"inh"$.
 ]
 
-// TODO: Proof sketch
+*Proof sketch.* Under alignment with $epsilon$-bounded coupling, each applied patch reduces global pressure by at least $delta_"min" - n epsilon > 0$. Since $P(s) >= 0$ and decreases by a fixed minimum per tick (when patches are applied), the system must reach a state where no region exceeds $tau_"act"$ within the stated bound. The decay constraint ensures that stability is maintained once reached: fitness reinforcement from the final patches persists longer than the decay erodes it. $square$
+
+The bound is loose but establishes the key property: convergence time scales with initial pressure, not with state space size or number of possible actions.
+
+== Basin Quality
+
+#theorem(name: "Basin Quality")[
+  In any stable basin $s^*$, the artifact pressure satisfies:
+  $ P(s^*) < n dot.c tau_"act" $
+  where $n$ is the number of regions and $tau_"act"$ is the activation threshold.
+]
+
+*Proof.* By definition of stability, $P_i(s^*) < tau_"act"$ for all $i$. Summing over regions: $P(s^*) = sum_i P_i(s^*) < n dot.c tau_"act"$. $square$
+
+This bound is tight: adversarial initial conditions can place the system in a basin where each region has pressure just below threshold. However, in practice, actors typically reduce pressure well below $tau_"act"$, yielding much lower basin pressures.
+
+#theorem(name: "Basin Separation")[
+  Under separable pressure (zero coupling), distinct stable basins are separated by pressure barriers of height at least $tau_"act"$.
+]
+
+*Proof sketch.* Moving from one basin to another requires some region to exceed $tau_"act"$ (otherwise no action is triggered). The minimum such exceedance defines the barrier height. $square$
+
+This explains why decay is necessary: without decay, the system can become trapped in suboptimal basins. Decay gradually erodes fitness, eventually allowing re-evaluation and potential escape to lower-pressure basins.
 
 == Scaling Properties
 
 #theorem(name: "Linear Scaling")[
-  With $n$ agents operating on $m$ regions, coordination overhead is $O(m)$ per tick, independent of $n$. Throughput scales linearly with agent count up to $m$ parallel actions per tick.
+  Let $m$ be the number of regions and $n$ be the number of parallel agents. The per-tick complexity is:
+  - *Signal computation:* $O(m dot.c d)$ where $d$ is signal dimension
+  - *Pressure computation:* $O(m dot.c k)$ where $k$ is the number of pressure axes
+  - *Patch proposal:* $O(m dot.c a)$ where $a$ is the number of actors
+  - *Selection:* $O(m dot.c a dot.c log(m dot.c a))$ for sorting candidates
+  - *Coordination overhead:* $O(1)$ — no inter-agent communication
+
+  Total: $O(m dot.c (d + k + a dot.c log(m a)))$, independent of $n$.
 ]
 
-// TODO: Proof or argument
+The key observation: adding agents increases throughput (more patches proposed per tick) without increasing coordination cost. This contrasts with hierarchical schemes where coordination overhead grows with agent count.
 
-== Comparison to Hierarchical Coordination
+== Comparison to Alternatives
 
-Hierarchical schemes require $O(n dot.c log(n))$ message passing for $n$ agents. Global planning requires $O(n dot.c m)$ evaluations. Our scheme requires $O(m)$ local evaluations with no message passing.
+We compare against three coordination paradigms:
+
+*Centralized planning.* A global planner evaluates all $(m dot.c a)$ possible actions, selects optimal subset. Per-step complexity: $O(m dot.c a)$ evaluations, but requires global state access. Sequential bottleneck prevents parallelization.
+
+*Hierarchical delegation.* Manager agents decompose tasks, delegate to workers. Communication complexity: $O(n log n)$ for tree-structured delegation with $n$ agents. Latency scales with tree depth. Failure of manager blocks all descendants.
+
+*Message-passing coordination.* Agents negotiate actions through pairwise communication. Convergence requires $O(n^2)$ messages in worst case for $n$ agents. Consensus protocols add latency.
+
+#figure(
+  table(
+    columns: 4,
+    [*Paradigm*], [*Coordination*], [*Parallelism*], [*Fault tolerance*],
+    [Centralized], [$O(m dot.c a)$], [None], [Single point of failure],
+    [Hierarchical], [$O(n log n)$], [Limited by tree], [Manager failure cascades],
+    [Message-passing], [$O(n^2)$], [Consensus-bound], [Partition-sensitive],
+    [Pressure-field], [$O(1)$], [Full ($min(n, m)$)], [Graceful degradation],
+  ),
+  caption: [Coordination overhead comparison],
+)
+
+Pressure-field coordination achieves $O(1)$ coordination overhead because agents share state only through the artifact itself—a form of stigmergy. Agents can fail, join, or leave without protocol overhead.
 
 = Experiments
 
