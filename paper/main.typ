@@ -21,7 +21,7 @@
 
 = Introduction
 
-Multi-agent systems built on large language models have emerged as a promising approach to complex task automation [1, 2, 3]. The dominant paradigm treats agents as organizational units: planners decompose tasks, managers delegate subtasks, and workers execute instructions under hierarchical supervision. This mirrors human project management but imports its coordination costs.
+Multi-agent systems built on large language models have emerged as a promising approach to complex task automation @wu2023autogen @hong2023metagpt @li2023camel. The dominant paradigm treats agents as organizational units: planners decompose tasks, managers delegate subtasks, and workers execute instructions under hierarchical supervision. This mirrors human project management but imports its coordination costs.
 
 We argue this design choice is fundamentally limiting. Human organizations evolved coordination mechanisms under constraints—limited communication bandwidth, cognitive load, trust verification—that do not apply to software agents. Importing these mechanisms into agent systems introduces artificial bottlenecks: central planners become serialization points, global state synchronization creates contention, and hierarchical message passing adds latency proportional to tree depth.
 
@@ -41,25 +41,25 @@ Our contributions:
 
 == Multi-Agent LLM Systems
 
-Recent work has explored multi-agent architectures for LLM-based task solving. AutoGen [1] introduces a conversation-based framework where customizable agents interact through message passing, with support for human-in-the-loop workflows. MetaGPT [2] encodes Standardized Operating Procedures (SOPs) into agent workflows, assigning specialized roles (architect, engineer, QA) in an assembly-line paradigm. CAMEL [3] proposes role-playing between AI assistant and AI user agents, using inception prompting to guide autonomous cooperation. CrewAI [4] similarly defines agents with roles, goals, and backstories that collaborate on complex tasks.
+Recent work has explored multi-agent architectures for LLM-based task solving. AutoGen @wu2023autogen introduces a conversation-based framework where customizable agents interact through message passing, with support for human-in-the-loop workflows. MetaGPT @hong2023metagpt encodes Standardized Operating Procedures (SOPs) into agent workflows, assigning specialized roles (architect, engineer, QA) in an assembly-line paradigm. CAMEL @li2023camel proposes role-playing between AI assistant and AI user agents, using inception prompting to guide autonomous cooperation. CrewAI @crewai2024 similarly defines agents with roles, goals, and backstories that collaborate on complex tasks.
 
 These frameworks share a common design pattern: explicit orchestration through message passing, role assignment, and hierarchical task decomposition. While effective for structured workflows, this approach faces scaling limitations. Central coordinators become bottlenecks, message-passing overhead grows with agent count, and failures in manager agents cascade to dependents. Our work takes a fundamentally different approach: coordination emerges from shared state rather than explicit communication.
 
 == Swarm Intelligence and Stigmergy
 
-The concept of stigmergy—indirect coordination through environment modification—was introduced by Grassé [5] to explain termite nest-building behavior. Termites deposit pheromone-infused material that attracts further deposits, leading to emergent construction without central planning. This principle has proven remarkably powerful: complex structures arise from simple local rules without any agent having global knowledge.
+The concept of stigmergy—indirect coordination through environment modification—was introduced by Grassé @grasse1959stigmergie to explain termite nest-building behavior. Termites deposit pheromone-infused material that attracts further deposits, leading to emergent construction without central planning. This principle has proven remarkably powerful: complex structures arise from simple local rules without any agent having global knowledge.
 
-Dorigo and colleagues [6, 7] formalized this insight into Ant Colony Optimization (ACO), where artificial pheromone trails guide search through solution spaces. Key mechanisms include positive feedback (reinforcing good paths), negative feedback (pheromone evaporation), and purely local decision-making. ACO has achieved strong results on combinatorial optimization problems including TSP, vehicle routing, and scheduling.
+Dorigo and colleagues @dorigo1996ant @dorigo1997acs formalized this insight into Ant Colony Optimization (ACO), where artificial pheromone trails guide search through solution spaces. Key mechanisms include positive feedback (reinforcing good paths), negative feedback (pheromone evaporation), and purely local decision-making. ACO has achieved strong results on combinatorial optimization problems including TSP, vehicle routing, and scheduling.
 
 Our pressure-field coordination directly inherits from stigmergic principles. The artifact serves as the shared environment; pressure gradients are analogous to pheromone concentrations; decay corresponds to evaporation. However, we generalize beyond path-finding to arbitrary artifact refinement and provide formal convergence guarantees through the potential game framework.
 
 == Decentralized Optimization
 
-Potential games, introduced by Monderer and Shapley [8], are games where individual incentives align with a global potential function. A key property is that any sequence of unilateral improvements converges to a Nash equilibrium—greedy local play achieves global coordination. This provides the theoretical foundation for our convergence guarantees: under pressure alignment, the artifact pressure serves as a potential function.
+Potential games, introduced by Monderer and Shapley @monderer1996potential, are games where individual incentives align with a global potential function. A key property is that any sequence of unilateral improvements converges to a Nash equilibrium—greedy local play achieves global coordination. This provides the theoretical foundation for our convergence guarantees: under pressure alignment, the artifact pressure serves as a potential function.
 
-Distributed gradient descent methods [9, 10] address optimization when data or computation is distributed across nodes. The standard approach combines local gradient steps with consensus averaging. While these methods achieve convergence rates matching centralized alternatives, they typically require communication protocols and synchronization. Our approach avoids explicit communication entirely: agents coordinate only through the shared artifact, achieving $O(1)$ coordination overhead.
+Distributed gradient descent methods @nedic2009distributed @yuan2016convergence address optimization when data or computation is distributed across nodes. The standard approach combines local gradient steps with consensus averaging. While these methods achieve convergence rates matching centralized alternatives, they typically require communication protocols and synchronization. Our approach avoids explicit communication entirely: agents coordinate only through the shared artifact, achieving $O(1)$ coordination overhead.
 
-The connection between multi-agent learning and game theory has been extensively studied [11]. Our contribution is applying these insights to LLM-based artifact refinement, where the "game" is defined by pressure functions over quality signals rather than explicit reward structures.
+The connection between multi-agent learning and game theory has been extensively studied @shoham2008multiagent. Our contribution is applying these insights to LLM-based artifact refinement, where the "game" is defined by pressure functions over quality signals rather than explicit reward structures.
 
 = Problem Formulation
 
@@ -349,29 +349,4 @@ Pressure-field coordination achieves $O(1)$ coordination overhead because agents
 
 We presented gradient-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration. Our theoretical analysis shows convergence guarantees under alignment conditions, and our experiments demonstrate linear scaling with agent count. This work suggests that constraint-driven emergence, inspired by natural coordination mechanisms, offers a more scalable foundation for multi-agent AI than imported human organizational patterns.
 
-#heading(numbering: none)[References]
-
-#set par(first-line-indent: 0em, hanging-indent: 1.5em)
-#set text(size: 9pt)
-
-[1] Wu, Q., Bansal, G., Zhang, J., Wu, Y., Zhang, S., Zhu, E., Li, B., Jiang, L., Zhang, X., and Wang, C. "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation." arXiv:2308.08155, 2023.
-
-[2] Hong, S., Zhuge, M., Chen, J., Zheng, X., Cheng, Y., Zhang, C., Wang, J., Wang, Z., Yau, S.K.S., Lin, Z., Zhou, L., Ran, C., Xiao, L., Wu, C., and Schmidhuber, J. "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework." arXiv:2308.00352, 2023.
-
-[3] Li, G., Hammoud, H.A.A.K., Itani, H., Khizbullin, D., and Ghanem, B. "CAMEL: Communicative Agents for Mind Exploration of Large Language Model Society." In _NeurIPS_, 2023.
-
-[4] CrewAI. "Framework for orchestrating role-playing, autonomous AI agents." https://github.com/crewAIInc/crewAI, 2024.
-
-[5] Grassé, P.-P. "La reconstruction du nid et les coordinations interindividuelles chez Bellicositermes natalensis et Cubitermes sp. La théorie de la stigmergie." _Insectes Sociaux_, 6:41–80, 1959.
-
-[6] Dorigo, M., Maniezzo, V., and Colorni, A. "Ant System: Optimization by a colony of cooperating agents." _IEEE Transactions on Systems, Man, and Cybernetics – Part B_, 26(1):29–41, 1996.
-
-[7] Dorigo, M. and Gambardella, L.M. "Ant Colony System: A cooperative learning approach to the traveling salesman problem." _IEEE Transactions on Evolutionary Computation_, 1(1):53–66, 1997.
-
-[8] Monderer, D. and Shapley, L.S. "Potential Games." _Games and Economic Behavior_, 14:124–143, 1996.
-
-[9] Nedic, A. and Ozdaglar, A. "Distributed subgradient methods for multi-agent optimization." _IEEE Transactions on Automatic Control_, 54(1):48–61, 2009.
-
-[10] Yuan, K., Ling, Q., and Yin, W. "On the convergence of decentralized gradient descent." _SIAM Journal on Optimization_, 26(3):1835–1854, 2016.
-
-[11] Shoham, Y. and Leyton-Brown, K. _Multiagent Systems: Algorithmic, Game-Theoretic, and Logical Foundations_. Cambridge University Press, 2008.
+#bibliography("references.bib", style: "ieee")
