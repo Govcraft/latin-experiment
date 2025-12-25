@@ -7,20 +7,24 @@ Cargo.lock
 # Typst
 *.pdf
 
-# Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Text and markdown files
+*.txt
+*.md
+
+# Hidden directories (ignore all except explicitly allowed)
+.*/
+
+# Explicitly allow these hidden directories
+!.github/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Notes (keep notes.txt but ignore other scratch files)
-scratch/
-*.scratch
+# Editor swap files
+*.swp
+*.swo
+*~
 
 # Environment
 .env
