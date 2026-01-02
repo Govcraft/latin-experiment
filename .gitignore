@@ -3,6 +3,13 @@
 **/target/
 Cargo.lock
 **/*.rs.bk
+*.rlib
+
+# Build artifacts (experiment outputs)
+improved
+messy_code
+messy_code_*
+results/
 
 # Typst
 *.pdf

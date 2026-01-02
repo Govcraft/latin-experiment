@@ -1,8 +1,15 @@
 //! Pressure and signal types: the gradient fields that drive coordination.
+//!
+//! The `Sensor` trait defines the interface for measuring quality signals from regions.
+//! Sensors are synchronous local computations.
+//!
+//! Actors (LLM proposers, etc.) are implemented as native acton-reactive actors that
+//! handle `ProposeForRegion` messages directly. There is no `Actor` trait - actors
+//! communicate via message passing.
 
 use std::collections::HashMap;
 
-use crate::region::{RegionState, RegionView};
+use crate::region::RegionView;
 
 /// Signals are measurable features computed from a region.
 /// These form the "state surface" that agents observe.
@@ -24,11 +31,16 @@ pub type PressureVector = HashMap<String, f64>;
 /// - Local: only examine the region and its immediate neighborhood
 /// - Deterministic: same input produces same output
 /// - Fast: called frequently during ticks
+///
+/// This trait is **synchronous** - sensors should compute locally without I/O.
 pub trait Sensor: Send + Sync {
     /// Unique name for this sensor.
     fn name(&self) -> &str;
 
     /// Measure signals for a region.
+    ///
+    /// This is synchronous - sensors should compute signals from the region data
+    /// without making external calls.
     fn measure(&self, region: &RegionView) -> anyhow::Result<Signals>;
 }
 
@@ -41,25 +53,54 @@ pub trait Pressure: Send + Sync {
     fn name(&self) -> &str;
 
     /// Compute pressure from signals and prior state.
-    fn compute(&self, region: &RegionView, signals: &Signals, prior: Option<&RegionState>) -> f64;
-}
-
-/// An actor proposes patches to reduce pressure.
-///
-/// Actors are the "agents" in this system, but they:
-/// - Have no persistent state
-/// - Make only local decisions
-/// - Compete via patch selection, not coordination
-pub trait Actor: Send + Sync {
-    /// Unique name for this actor.
-    fn name(&self) -> &str;
-
-    /// Propose candidate patches for a high-pressure region.
-    fn propose(
+    fn compute(
         &self,
         region: &RegionView,
         signals: &Signals,
-        pressures: &PressureVector,
-        state: &RegionState,
-    ) -> anyhow::Result<Vec<crate::region::Patch>>;
+        prior: Option<&crate::region::RegionState>,
+    ) -> f64;
+}
+
+/// Measure total weighted pressure for content synchronously.
+///
+/// Used by RegionActors to validate that patches actually reduce pressure
+/// before accepting them (ensures δ_min > 0 per the convergence theorem).
+///
+/// # Arguments
+/// * `content` - The code content to measure
+/// * `kind` - The region kind (e.g., "function")
+/// * `sensor` - The sensor to measure signals
+/// * `pressure_axes` - The pressure axis weights from config
+///
+/// # Returns
+/// Total weighted pressure: Σ w_j * φ_j(σ(content))
+pub fn measure_pressure_inline(
+    content: &str,
+    kind: &str,
+    sensor: &dyn Sensor,
+    pressure_axes: &[crate::config::PressureAxisConfig],
+) -> anyhow::Result<f64> {
+    use uuid::Uuid;
+
+    let view = RegionView {
+        id: Uuid::nil(),
+        kind: kind.to_string(),
+        content: content.to_string(),
+        metadata: HashMap::new(),
+    };
+
+    let signals = sensor.measure(&view)?;
+
+    let total: f64 = pressure_axes
+        .iter()
+        .map(|axis| {
+            // Get the signal value for this axis (using expr as signal name)
+            let signal_value = signals.get(&axis.expr).copied().unwrap_or(0.0);
+            // Apply kind-specific weight if present, otherwise use base weight
+            let weight = axis.kind_weights.get(kind).copied().unwrap_or(axis.weight);
+            signal_value * weight
+        })
+        .sum();
+
+    Ok(total)
 }

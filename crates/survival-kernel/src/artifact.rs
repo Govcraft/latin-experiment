@@ -29,4 +29,11 @@ pub trait Artifact: Send + Sync {
     fn snapshot(&self) -> Option<Box<dyn Artifact>> {
         None
     }
+
+    /// Optional: get the full source content of the artifact.
+    ///
+    /// Used for saving the final state after optimization.
+    fn source(&self) -> Option<String> {
+        None
+    }
 }
