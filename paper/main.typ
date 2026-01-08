@@ -11,7 +11,7 @@
   abstract: [
     Current multi-agent LLM frameworks rely on explicit orchestration patterns borrowed from human organizational structures: planners delegate to executors, managers coordinate workers, and hierarchical control flow governs agent interactions. These approaches suffer from coordination overhead that scales poorly with agent count and task complexity. We propose a fundamentally different paradigm inspired by natural coordination mechanisms: agents operate locally on a shared artifact, guided only by pressure gradients derived from measurable quality signals, with temporal decay preventing premature convergence. We formalize this as optimization over a pressure landscape and prove convergence guarantees under mild conditions.
 
-    Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40--50% for hierarchical and sequential baselines using identical LLMs. The approach scales linearly from 1 to 32 agents without degradation, while baselines show erratic performance. Notably, temporal decay proves essential (disabling it drops solve rate to 0%), and few-shot prompting unexpectedly harms performance (100% to 40%), suggesting pressure-driven exploration outperforms prompt engineering for constraint satisfaction. Our results indicate that constraint-driven emergence offers a more scalable foundation for multi-agent AI systems than imported human organizational patterns.
+    Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40--50% for the best baseline (hierarchical) using identical LLMs. The approach scales linearly from 1 to 32 agents without degradation, while baselines show erratic performance. Notably, temporal decay proves essential (disabling it drops solve rate to 0%), and few-shot prompting unexpectedly harms performance (100% to 40%), suggesting pressure-driven exploration outperforms prompt engineering for constraint satisfaction. Our results indicate that constraint-driven emergence offers a more scalable foundation for multi-agent AI systems than imported human organizational patterns.
   ],
   keywords: (
     "multi-agent systems",
@@ -37,7 +37,7 @@ Our contributions:
 
 + We prove convergence guarantees for this coordination scheme under conditions that commonly hold in practice.
 
-+ We demonstrate empirically that gradient-field coordination achieves 100% solve rate on Latin Square constraint satisfaction with 4 agents (vs. 40--50% for baselines), scales linearly from 1 to 32 agents, and exhibits graceful degradation on harder problems where baselines collapse entirely.
++ We demonstrate empirically that gradient-field coordination achieves 100% solve rate on Latin Square constraint satisfaction with 4 agents (vs. 40% for the best baseline), scales linearly from 1 to 32 agents, and exhibits graceful degradation on harder problems where baselines collapse entirely.
 
 = Related Work
 
@@ -307,7 +307,7 @@ Pressure-field coordination achieves $O(1)$ coordination overhead because agents
 
 We evaluate pressure-field coordination on Latin Square constraint satisfaction: filling partially-completed $n times n$ grids such that each row and column contains each number $1$ to $n$ exactly once. This domain provides clear pressure signals (constraint violations), measurable success criteria, and scalable difficulty.
 
-*Key findings*: Pressure-field coordination achieves 100% solve rate with 4 agents versus 40--50% for baselines (§5.2). Temporal decay is critical---disabling it drops performance to 0% (§5.3). Most surprisingly, few-shot prompting *degrades* performance from 100% to 40% (§5.3), challenging conventional LLM prompting wisdom. The approach scales linearly from 1 to 32 agents (§5.4), and model escalation provides 2--4$times$ improvement on difficult cases (§5.5).
+*Key findings*: Pressure-field coordination achieves 100% solve rate with 4 agents versus 40% for the best baseline (§5.2). Temporal decay is critical---disabling it drops performance to 0% (§5.3). Most surprisingly, few-shot prompting *degrades* performance from 100% to 40% (§5.3), challenging conventional LLM prompting wisdom. The approach scales linearly from 1 to 32 agents (§5.4), and model escalation provides 2--4$times$ improvement on difficult cases (§5.5).
 
 == Setup
 
@@ -356,7 +356,7 @@ Pressure-field coordination dramatically outperforms all baselines:
     [Sequential], [0%], [40%], [30%], [10%],
     [Random], [0%], [40%], [20%], [0%],
   ),
-  caption: [Solve rates on $7 times 7$ Latin Squares (10 trials each). Pressure-field achieves 100% at 4 agents while baselines plateau at 40--50%.],
+  caption: [Solve rates on $7 times 7$ Latin Squares (10 trials each). Pressure-field achieves 100% at 4 agents; best baseline (hierarchical) reaches only 40--50%.],
 )
 
 The performance gap is substantial: pressure-field with 4 agents achieves 100% solve rate versus 40% for the best baseline (hierarchical). For solved cases, pressure-field also converges faster (16.1 average ticks vs. 32+ for baselines).
@@ -437,7 +437,7 @@ To quantify the impact of model escalation (used in all preceding experiments), 
   caption: [Model escalation on hard problems ($7 times 7$, 8 empty cells). Escalation provides 2--4$times$ improvement by breaking through local minima.],
 ) <tbl:escalation>
 
-Escalation is economical: 95% of patches use the smallest model, with larger models invoked only for persistent high-pressure regions. This demonstrates adaptive resource allocation without manual tuning.
+Escalation is economical: larger models are invoked only for persistent high-pressure regions, demonstrating adaptive resource allocation without manual tuning.
 
 == Difficulty Scaling
 
@@ -503,7 +503,7 @@ Interestingly, hierarchical coordination shows mixed results with escalation (so
 
 We presented gradient-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
 
-Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40--50% for hierarchical and sequential baselines using identical LLMs. The approach scales linearly from 1 to 32 agents (maintaining 80--100% solve rate) while baselines show erratic performance.
+Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40% for the best baseline (hierarchical) using identical LLMs. The approach scales linearly from 1 to 32 agents (maintaining 80--100% solve rate) while baselines show erratic performance.
 
 Key findings include: (1) temporal decay is essential---disabling it drops solve rate to 0%; (2) few-shot prompting unexpectedly degrades performance, suggesting pressure-driven exploration differs fundamentally from standard LLM prompting; (3) model escalation provides 2--4$times$ improvement on hard problems by breaking through local minima.
 
