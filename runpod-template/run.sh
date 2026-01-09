@@ -82,50 +82,44 @@ start_vllm_server() {
     echo $!
 }
 
-# Start all servers with generous memory allocation for vLLM overhead
-PID_05B=$(start_vllm_server "Qwen2.5-0.5B" 8001 0.05)
-PID_15B=$(start_vllm_server "Qwen2.5-1.5B" 8002 0.08)
-PID_3B=$(start_vllm_server "Qwen2.5-3B" 8003 0.12)
-PID_7B=$(start_vllm_server "Qwen2.5-7B" 8004 0.22)
-PID_14B=$(start_vllm_server "Qwen2.5-14B" 8005 0.43)
-
-echo ""
-echo "vLLM PIDs: 0.5B=$PID_05B, 1.5B=$PID_15B, 3B=$PID_3B, 7B=$PID_7B, 14B=$PID_14B"
-
-# Wait for all servers to be ready
-echo ""
-echo "Waiting for all vLLM servers to be ready..."
+# Start servers SEQUENTIALLY to avoid initialization conflicts
+# vLLM has issues when multiple instances start simultaneously
 
 wait_for_server() {
     local port=$1
     local name=$2
-    for i in {1..180}; do
+    local timeout=${3:-180}
+    for i in $(seq 1 $timeout); do
         if curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
             echo "  $name (port $port) ready after ${i}s"
             return 0
         fi
         sleep 1
     done
-    echo "ERROR: $name (port $port) failed to start within 180s"
+    echo "ERROR: $name (port $port) failed to start within ${timeout}s"
     echo "=== vLLM log for port $port ==="
-    cat "/workspace/vllm-${port}.log"
+    tail -50 "/workspace/vllm-${port}.log"
     return 1
 }
 
-# Wait for all servers in parallel
-wait_for_server 8001 "Qwen2.5-0.5B" &
-WAIT_05B=$!
-wait_for_server 8002 "Qwen2.5-1.5B" &
-WAIT_15B=$!
-wait_for_server 8003 "Qwen2.5-3B" &
-WAIT_3B=$!
-wait_for_server 8004 "Qwen2.5-7B" &
-WAIT_7B=$!
-wait_for_server 8005 "Qwen2.5-14B" &
-WAIT_14B=$!
+echo ""
+echo "Starting vLLM servers sequentially (to avoid init conflicts)..."
 
-# Wait for all waits to complete
-wait $WAIT_05B $WAIT_15B $WAIT_3B $WAIT_7B $WAIT_14B
+# Start smallest model first, wait for it, then proceed
+start_vllm_server "Qwen2.5-0.5B" 8001 0.05
+wait_for_server 8001 "Qwen2.5-0.5B" 120 || exit 1
+
+start_vllm_server "Qwen2.5-1.5B" 8002 0.08
+wait_for_server 8002 "Qwen2.5-1.5B" 120 || exit 1
+
+start_vllm_server "Qwen2.5-3B" 8003 0.12
+wait_for_server 8003 "Qwen2.5-3B" 120 || exit 1
+
+start_vllm_server "Qwen2.5-7B" 8004 0.22
+wait_for_server 8004 "Qwen2.5-7B" 180 || exit 1
+
+start_vllm_server "Qwen2.5-14B" 8005 0.43
+wait_for_server 8005 "Qwen2.5-14B" 240 || exit 1
 
 echo ""
 echo "All vLLM servers ready!"
