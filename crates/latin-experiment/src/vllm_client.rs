@@ -1,6 +1,6 @@
 //! vLLM client for OpenAI-compatible chat completions API.
 //!
-//! Replaces ollama-rs with direct HTTP calls to vLLM server.
+//! Direct HTTP calls to vLLM server for chat completions.
 //! Supports system prompts via the chat completions API.
 //!
 //! For multi-model setups (model escalation), supports routing requests
@@ -37,7 +37,7 @@ fn model_to_port(model: &str) -> Option<u16> {
     }
 }
 
-/// Default system prompt for Latin Square solving (replaces Ollama Modelfile).
+/// Default system prompt for Latin Square solving.
 pub const LATIN_SYSTEM_PROMPT: &str = "You solve Latin Square puzzles. Given a row with \
     empty cells (_), return ONLY the number(s) that fill them. Return just the numbers, \
     nothing else.";

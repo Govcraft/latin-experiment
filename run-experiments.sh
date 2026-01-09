@@ -245,7 +245,7 @@ run_main_grid() {
 
     run_cmd "Main Grid Experiment" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -272,7 +272,7 @@ run_ablation() {
 
     run_cmd "Ablation Study" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_SINGLE" \
         ablation \
         --trials "$TRIALS" \
@@ -296,7 +296,7 @@ run_scaling() {
 
     run_cmd "Scaling Analysis" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -324,7 +324,7 @@ run_escalation() {
     log_info "Running WITHOUT escalation..."
     run_cmd "Escalation: Single Model" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_SINGLE" \
         grid \
         --trials "$TRIALS" \
@@ -338,7 +338,7 @@ run_escalation() {
     log_info "Running WITH escalation..."
     run_cmd "Escalation: Model Chain" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -366,7 +366,7 @@ run_difficulty() {
     log_info "Running Easy difficulty (5x5, 5 empty)..."
     run_cmd "Difficulty: Easy" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -381,7 +381,7 @@ run_difficulty() {
     log_info "Running Medium difficulty (6x6, 8 empty)..."
     run_cmd "Difficulty: Medium" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -396,7 +396,7 @@ run_difficulty() {
     log_info "Running Hard difficulty (7x7, 10 empty)..."
     run_cmd "Difficulty: Hard" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \
@@ -411,7 +411,7 @@ run_difficulty() {
     log_info "Running Very Hard difficulty (8x8, 14 empty)..."
     run_cmd "Difficulty: Very Hard" \
         "$LATIN_EXPERIMENT" \
-        --ollama-host "$VLLM_HOST" \
+        --vllm-host "$VLLM_HOST" \
         --model-chain "$MODEL_CHAIN" \
         --escalation-threshold "$ESCALATION_THRESHOLD" \
         grid \

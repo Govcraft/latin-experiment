@@ -30,8 +30,8 @@ use crate::vllm_client::VllmClient;
 /// Configuration for the experiment runner.
 #[derive(Debug, Clone)]
 pub struct ExperimentRunnerConfig {
-    /// Ollama host URL
-    pub ollama_host: String,
+    /// vLLM host URL
+    pub vllm_host: String,
     /// Model name (base model)
     pub model: String,
     /// Model escalation chain (e.g., ["qwen2.5:1.5b", "qwen2.5:7b", "qwen2.5:14b"])
@@ -60,7 +60,7 @@ pub struct ExperimentRunnerConfig {
 impl Default for ExperimentRunnerConfig {
     fn default() -> Self {
         Self {
-            ollama_host: "http://localhost:8000".to_string(),
+            vllm_host: "http://localhost:8000".to_string(),
             model: "Qwen/Qwen2.5-0.5B".to_string(),
             model_chain: vec![
                 "Qwen/Qwen2.5-0.5B".to_string(),
@@ -206,7 +206,7 @@ impl ExperimentRunner {
                 self.config.model_chain[0].clone()
             };
             conversation_runner = Some(ConversationRunner::new(
-                &self.config.ollama_host,
+                &self.config.vllm_host,
                 &model,
                 self.config.conversation_max_turns,
             )?);
@@ -637,7 +637,7 @@ impl ExperimentRunner {
 
         // Create concurrent LLM calls
         let num_calls = self.config.max_concurrent_llm.min(empty_positions.len() * 2);
-        let client = Arc::new(VllmClient::new(&self.config.ollama_host));
+        let client = Arc::new(VllmClient::new(&self.config.vllm_host));
 
         let futures: Vec<_> = (0..num_calls)
             .map(|i| {
@@ -812,7 +812,7 @@ What number goes in position {target_pos}? Return just the number."#,
         debug!(row_idx = row_idx, temp = temp, top_p = top_p, "Calling LLM for patch");
 
         // Call vLLM with sampled options
-        let client = VllmClient::new(&self.config.ollama_host);
+        let client = VllmClient::new(&self.config.vllm_host);
 
         let response = match client.generate(&self.config.model, &prompt, temp, top_p, 8).await {
             Ok(r) => r,

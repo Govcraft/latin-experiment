@@ -1,4 +1,4 @@
-//! LLM actor for Latin Square puzzle solving using Ollama.
+//! LLM actor for Latin Square puzzle solving using vLLM.
 //!
 //! Proposes row patches to fill empty cells and resolve conflicts.
 //! Supports sampling diversity (varying temperature/top-p) and few-shot learning.
@@ -91,7 +91,7 @@ pub enum SamplingBand {
 /// Configuration for the LLM actor.
 #[derive(Debug, Clone)]
 pub struct LlmActorConfig {
-    /// Ollama host URL
+    /// vLLM host URL
     pub host: String,
     /// Model name
     pub model: String,

@@ -33,8 +33,8 @@ fn timestamped_path(path: &Path) -> PathBuf {
 #[command(about = "Latin Square coordination experiments")]
 struct Cli {
     /// vLLM host URL
-    #[arg(long, env = "VLLM_HOST", default_value = "http://localhost:8000")]
-    ollama_host: String,
+    #[arg(long = "vllm-host", env = "VLLM_HOST", default_value = "http://localhost:8000")]
+    vllm_host: String,
 
     /// Model name (base model, first in escalation chain)
     #[arg(long, default_value = "Qwen/Qwen2.5-0.5B")]
@@ -185,7 +185,7 @@ async fn main() -> Result<()> {
             let strategy = parse_strategy(&strategy)?;
 
             let config = ExperimentRunnerConfig {
-                ollama_host: cli.ollama_host,
+                vllm_host: cli.vllm_host,
                 model: cli.model,
                 model_chain: cli.model_chain,
                 escalation_threshold: cli.escalation_threshold,
@@ -260,7 +260,7 @@ async fn main() -> Result<()> {
                 for &agent_count in &agents {
                     for trial in 0..trials {
                         let config = ExperimentRunnerConfig {
-                            ollama_host: cli.ollama_host.clone(),
+                            vllm_host: cli.vllm_host.clone(),
                             model: cli.model.clone(),
                             model_chain: cli.model_chain.clone(),
                             escalation_threshold: cli.escalation_threshold,
@@ -336,7 +336,7 @@ async fn main() -> Result<()> {
             for (decay, inhibition, examples) in configs {
                 for trial in 0..trials {
                     let config = ExperimentRunnerConfig {
-                        ollama_host: cli.ollama_host.clone(),
+                        vllm_host: cli.vllm_host.clone(),
                         model: cli.model.clone(),
                         model_chain: cli.model_chain.clone(),
                         escalation_threshold: cli.escalation_threshold,

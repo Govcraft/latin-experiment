@@ -321,7 +321,7 @@ where $"empty"_i$ counts unfilled cells in row $i$, $"row\_dups"_i$ counts dupli
 
 === Baselines
 
-We compare four coordination strategies, all using identical LLMs (`qwen2.5-coder:1.5b` via Ollama) to isolate coordination effects:
+We compare four coordination strategies, all using identical LLMs (`Qwen/Qwen2.5-0.5B` via vLLM) to isolate coordination effects:
 
 *Pressure-field (ours)*: Full system with decay ($lambda_f = 0.1$), inhibition ($tau_"inh" = 4$ ticks), and parallel validation.
 
@@ -339,7 +339,7 @@ We compare four coordination strategies, all using identical LLMs (`qwen2.5-code
 
 === Implementation
 
-*Hardware*: NVIDIA RTX 4070 Laptop GPU (8GB). *Software*: Rust implementation with Ollama v0.5+. *Trials*: 10 per configuration. Full protocol in Appendix A.
+*Hardware*: NVIDIA RTX 4070 Laptop GPU (8GB). *Software*: Rust implementation with vLLM. *Trials*: 10 per configuration. Full protocol in Appendix A.
 
 *Model escalation*: Unless otherwise noted, all experiments use adaptive model escalation: when a region remains high-pressure for 10 consecutive ticks, the system escalates from 1.5b to 7b to 14b parameters. Section 5.5 ablates this mechanism.
 
@@ -519,23 +519,20 @@ This appendix provides complete reproducibility information for all experiments.
 
 *Software:*
 - Rust 1.75+ (edition 2024)
-- Ollama v0.5+
-- Models: `qwen2.5-coder:1.5b`, `qwen2.5-coder:7b`, `qwen2.5-coder:14b`
+- vLLM (OpenAI-compatible inference server)
+- Models: `Qwen/Qwen2.5-0.5B`, `Qwen/Qwen2.5-1.5B`, `Qwen/Qwen2.5-3B`, `Qwen/Qwen2.5-7B`, `Qwen/Qwen2.5-14B`
 
 == Model Configuration
 
-Custom modelfiles tune the base models for Latin Square solving:
+Models are served via vLLM with a system prompt configured for Latin Square solving:
 
 ```
-FROM qwen2.5-coder:1.5b
-SYSTEM """You solve Latin Square puzzles. Given a row with ONE empty cell (_),
-return ONLY the single number that fills it.
-Example: Row "1 _ 3 4" with available values [2] → Output: 2
-Return just the number, nothing else."""
-PARAMETER num_predict 8
+You solve Latin Square puzzles. Given a row with empty cells (_),
+return ONLY the number(s) that fill them. Return just the numbers,
+nothing else.
 ```
 
-Create variants for 7b and 14b by changing the FROM line.
+For multi-model setups (model escalation), each model runs on a separate vLLM instance with automatic port routing based on model size.
 
 == Sampling Diversity
 
