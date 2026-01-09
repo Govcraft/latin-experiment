@@ -2,6 +2,7 @@
 #
 # Startup script for Latin Square Experiment Pod
 #
+# Downloads models to /workspace/models on first run (persists across restarts).
 # Starts 5 vLLM servers (one per model) and runs experiments.
 # Results are saved to /workspace/results (persistent network drive).
 
@@ -11,8 +12,43 @@ echo "=== Latin Square Experiment Pod ==="
 echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'unknown')"
 echo "Time: $(date)"
 
-# Create results directory in /workspace (persistent volume)
-mkdir -p /workspace/results
+# Create directories in /workspace (persistent volume)
+MODELS_DIR="${MODELS_DIR:-/workspace/models}"
+mkdir -p "$MODELS_DIR" /workspace/results
+
+# Download models if not already present
+download_model() {
+    local model_name=$1
+    local model_dir="$MODELS_DIR/$model_name"
+
+    if [[ -d "$model_dir" ]] && [[ -f "$model_dir/config.json" ]]; then
+        echo "  $model_name already downloaded"
+        return 0
+    fi
+
+    echo "  Downloading $model_name..."
+    python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('Qwen/$model_name', local_dir='$model_dir')
+print('  Done: $model_name')
+"
+}
+
+echo ""
+echo "=== Checking Models ==="
+echo "Models directory: $MODELS_DIR"
+
+# Enable fast downloads
+export HF_HUB_ENABLE_HF_TRANSFER=1
+
+download_model "Qwen2.5-0.5B"
+download_model "Qwen2.5-1.5B"
+download_model "Qwen2.5-3B"
+download_model "Qwen2.5-7B"
+download_model "Qwen2.5-14B"
+
+echo ""
+echo "All models ready!"
 
 # Start vLLM servers for each model in the escalation chain
 # Each model runs on a different port (8001-8005)
@@ -31,7 +67,7 @@ start_vllm_server() {
     local logfile="/workspace/vllm-${port}.log"
 
     echo "  Starting $model on port $port..."
-    vllm serve /app/models/$model \
+    vllm serve "$MODELS_DIR/$model" \
         --dtype bfloat16 \
         --gpu-memory-utilization 0.18 \
         --max-model-len 2048 \
