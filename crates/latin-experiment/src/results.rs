@@ -6,6 +6,8 @@
 //! - LLM call efficiency
 //! - Example bank statistics
 //! - Model escalation events
+//! - Token usage per tick
+//! - Patch rejection reasons
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -15,6 +17,21 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::example_bank::ExampleBankStats;
+
+/// Reasons why a proposed patch was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PatchRejection {
+    /// Patch did not reduce pressure (not an improvement)
+    DidNotReducePressure,
+    /// Could not parse LLM output as a valid patch
+    ParseFailure,
+    /// Patch would introduce constraint violations
+    WouldIncreaseViolations,
+    /// Patch was a duplicate of another proposal
+    Duplicate,
+    /// Region is under inhibition cooldown
+    InhibitionCooldown,
+}
 
 /// Record of a model escalation event.
 ///
@@ -60,6 +77,13 @@ pub struct ExperimentResult {
     pub escalation_events: Vec<EscalationEvent>,
     /// Which model tier was active when solved (or last model if unsolved)
     pub final_model: String,
+    /// Total prompt tokens used across all ticks
+    pub total_prompt_tokens: u32,
+    /// Total completion tokens generated across all ticks
+    pub total_completion_tokens: u32,
+    /// Aggregate patch rejection counts across all ticks
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub total_patch_rejections: HashMap<PatchRejection, usize>,
     /// Conversation statistics (for Conversation strategy only)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_stats: Option<ConversationStats>,
@@ -100,6 +124,15 @@ pub struct TickMetrics {
     pub violations: usize,
     pub llm_calls: usize,
     pub duration_ms: u64,
+    /// Model active during this tick (for tracking escalation effects)
+    pub model_used: String,
+    /// Total prompt tokens consumed this tick
+    pub prompt_tokens: u32,
+    /// Total completion tokens generated this tick
+    pub completion_tokens: u32,
+    /// Count of patch rejections by reason
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub patch_rejections: HashMap<PatchRejection, usize>,
     /// Number of conversation messages exchanged (for Conversation strategy only)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub messages_per_tick: Option<usize>,
@@ -299,6 +332,9 @@ mod tests {
                 tick_metrics: vec![],
                 escalation_events: vec![],
                 final_model: "test-model".to_string(),
+                total_prompt_tokens: 100,
+                total_completion_tokens: 50,
+                total_patch_rejections: HashMap::new(),
                 conversation_stats: None,
             });
         }

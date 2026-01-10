@@ -23,7 +23,10 @@ use crate::artifact::LatinSquareArtifact;
 use crate::conversation::ConversationRunner;
 use crate::example_bank::{Example, ExampleBank, ExampleBankConfig};
 use crate::generator::{Difficulty, GeneratorConfig, LatinSquareGenerator};
-use crate::results::{ConversationStats, EscalationEvent, ExperimentConfig, ExperimentResult, TickMetrics};
+use crate::results::{
+    ConversationStats, EscalationEvent, ExperimentConfig, ExperimentResult, PatchRejection,
+    TickMetrics,
+};
 use crate::sensors::{update_shared_grid, LatinSquareSensor, SharedGrid};
 use crate::vllm_client::VllmClient;
 
@@ -184,6 +187,11 @@ impl ExperimentRunner {
         let mut empty_cells_history = Vec::new();
         let mut tick_metrics = Vec::new();
 
+        // Token usage tracking
+        let mut total_prompt_tokens: u32 = 0;
+        let mut total_completion_tokens: u32 = 0;
+        let mut total_patch_rejections: HashMap<PatchRejection, usize> = HashMap::new();
+
         // Initial measurement
         let initial_pressure = self.measure_total_pressure(&artifact, &sensor)?;
         pressure_history.push(initial_pressure);
@@ -223,7 +231,8 @@ impl ExperimentRunner {
             }
 
             // Handle Conversation strategy separately (different flow)
-            let (patches_applied, messages_this_tick) = if strategy == Strategy::Conversation {
+            // TODO: Add token tracking to ConversationRunner when available
+            let (patches_applied, messages_this_tick, tick_prompt_tokens, tick_completion_tokens, tick_rejections, tick_model) = if strategy == Strategy::Conversation {
                 let runner = conversation_runner.as_ref().unwrap();
                 let (patch_opt, conv_state) = runner.run_tick(&artifact, &shared_grid).await?;
 
@@ -233,6 +242,14 @@ impl ExperimentRunner {
                     total_consensus_ticks += 1;
                 }
 
+                // Get current model for conversation
+                let conv_model = if self.config.model_chain.is_empty() {
+                    self.config.model.clone()
+                } else {
+                    self.config.model_chain[current_model_idx.min(self.config.model_chain.len() - 1)].clone()
+                };
+
+                let mut tick_rejections: HashMap<PatchRejection, usize> = HashMap::new();
                 let mut applied = 0;
                 if let Some(new_content) = patch_opt {
                     // Find the target region (coordinator selected it)
@@ -275,12 +292,25 @@ impl ExperimentRunner {
                             }
                             Err(e) => {
                                 debug!(tick = tick, error = %e, "Conversation patch rejected");
+                                *tick_rejections.entry(PatchRejection::WouldIncreaseViolations).or_insert(0) += 1;
                             }
                         }
                     }
                 }
 
-                (applied, Some(messages_count))
+                // Conversation token tracking: estimate from message count
+                // Each message ≈ 100 tokens prompt + 50 tokens completion (rough estimate)
+                // TODO: Get actual tokens from ConversationRunner when available
+                let estimated_prompt_tokens = (messages_count as u32) * 100;
+                let estimated_completion_tokens = (messages_count as u32) * 50;
+                total_prompt_tokens += estimated_prompt_tokens;
+                total_completion_tokens += estimated_completion_tokens;
+
+                for (reason, count) in &tick_rejections {
+                    *total_patch_rejections.entry(*reason).or_insert(0) += count;
+                }
+
+                (applied, Some(messages_count), estimated_prompt_tokens, estimated_completion_tokens, tick_rejections, conv_model)
             } else {
                 // Standard strategies: PressureField, Sequential, Random, Hierarchical
                 let region_id = match strategy {
@@ -326,10 +356,26 @@ impl ExperimentRunner {
                     .generate_concurrent_patches(&artifact, region_id, &examples, &current_model)
                     .await?;
 
+                // Tick-level tracking
+                let mut tick_prompt_tokens: u32 = 0;
+                let mut tick_completion_tokens: u32 = 0;
+                let mut tick_rejections: HashMap<PatchRejection, usize> = HashMap::new();
+
+                // Accumulate tokens from all LLM calls
+                for (_, prompt_t, completion_t) in &patch_results {
+                    tick_prompt_tokens += prompt_t;
+                    tick_completion_tokens += completion_t;
+                }
+
                 // Try each patch result until one succeeds
                 let mut patches_applied = 0;
-                let _llm_calls = patch_results.len();
-                for new_content in patch_results {
+                for (new_content, _, _) in &patch_results {
+                    // Skip empty content (parse failures)
+                    if new_content.is_empty() {
+                        *tick_rejections.entry(PatchRejection::ParseFailure).or_insert(0) += 1;
+                        continue;
+                    }
+
                     // Validate that the patch reduces pressure
                     let temp_view = survival_kernel::region::RegionView {
                         id: region_id,
@@ -359,7 +405,7 @@ impl ExperimentRunner {
                                     let bank = example_bank.read().await;
                                     bank.add_example(
                                         region_view.content.clone(),
-                                        new_content,
+                                        new_content.clone(),
                                         pressure_before,
                                         pressure_after,
                                     );
@@ -370,14 +416,23 @@ impl ExperimentRunner {
                             }
                             Err(e) => {
                                 debug!(tick = tick, error = %e, "Patch rejected - invalid");
+                                *tick_rejections.entry(PatchRejection::WouldIncreaseViolations).or_insert(0) += 1;
                             }
                         }
                     } else {
                         debug!(tick = tick, "Patch rejected - did not reduce pressure");
+                        *tick_rejections.entry(PatchRejection::DidNotReducePressure).or_insert(0) += 1;
                     }
                 }
 
-                (patches_applied, None)
+                // Aggregate tick-level stats into totals
+                total_prompt_tokens += tick_prompt_tokens;
+                total_completion_tokens += tick_completion_tokens;
+                for (reason, count) in &tick_rejections {
+                    *total_patch_rejections.entry(*reason).or_insert(0) += count;
+                }
+
+                (patches_applied, None, tick_prompt_tokens, tick_completion_tokens, tick_rejections, current_model)
             };
 
             // Record metrics
@@ -396,6 +451,10 @@ impl ExperimentRunner {
                 violations: artifact.total_violations(),
                 llm_calls: if patches_applied > 0 { 1 } else { 0 },
                 duration_ms: tick_start.elapsed().as_millis() as u64,
+                model_used: tick_model,
+                prompt_tokens: tick_prompt_tokens,
+                completion_tokens: tick_completion_tokens,
+                patch_rejections: tick_rejections,
                 messages_per_tick: messages_this_tick,
             });
 
@@ -525,6 +584,9 @@ impl ExperimentRunner {
             tick_metrics,
             escalation_events,
             final_model,
+            total_prompt_tokens,
+            total_completion_tokens,
+            total_patch_rejections,
             conversation_stats,
         })
     }
@@ -605,13 +667,15 @@ impl ExperimentRunner {
     ///
     /// Each call targets a potentially different empty position with different
     /// sampling parameters (temperature/top_p) for exploration diversity.
+    ///
+    /// Returns Vec of (patch_content, prompt_tokens, completion_tokens).
     async fn generate_concurrent_patches(
         &self,
         artifact: &LatinSquareArtifact,
         region_id: uuid::Uuid,
         examples: &[Example],
         current_model: &str,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<(String, u32, u32)>> {
         let n = artifact.size();
         let row_idx = artifact.row_index(region_id).unwrap_or(0);
         let availability = artifact.column_availability(row_idx);
@@ -692,9 +756,9 @@ What number goes in position {target_pos}? Return just the number."#,
                         _ => (rng.random_range(0.55..0.85), rng.random_range(0.90..0.98)),
                     };
 
-                    match client.generate(&model, &prompt, temp, top_p, 8).await {
-                        Ok(response_text) => {
-                            let response_text = response_text.trim();
+                    match client.generate_with_usage(&model, &prompt, temp, top_p, 8).await {
+                        Ok(response) => {
+                            let response_text = response.content.trim();
                             // Parse single number
                             let cleaned = response_text.replace([',', '[', ']', '"', '.'], " ");
 
@@ -706,10 +770,15 @@ What number goes in position {target_pos}? Return just the number."#,
                                     // Construct new row
                                     let mut new_cells = cells.clone();
                                     new_cells[target_pos] = num.to_string();
-                                    return Some(new_cells.join(" "));
+                                    return Some((
+                                        new_cells.join(" "),
+                                        response.prompt_tokens,
+                                        response.completion_tokens,
+                                    ));
                                 }
                             }
-                            None
+                            // Failed to parse, but still consumed tokens
+                            Some(("".to_string(), response.prompt_tokens, response.completion_tokens))
                         }
                         Err(e) => {
                             debug!(error = %e, "Concurrent LLM call failed");
@@ -723,7 +792,7 @@ What number goes in position {target_pos}? Return just the number."#,
         // Run all calls concurrently
         let results = join_all(futures).await;
 
-        // Filter successful results
+        // Filter and collect results (include even empty patches to track token usage)
         Ok(results.into_iter().flatten().collect())
     }
 

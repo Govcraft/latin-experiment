@@ -70,12 +70,35 @@ struct ChatRequest {
 #[derive(Deserialize)]
 struct ChatResponse {
     choices: Vec<ChatChoice>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+/// Token usage statistics from the API.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+struct Usage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    total_tokens: u32,
 }
 
 /// A single choice in the response.
 #[derive(Deserialize)]
 struct ChatChoice {
     message: ChatMessage,
+}
+
+/// Response from an LLM call including content and token usage.
+#[derive(Debug, Clone, Default)]
+pub struct LlmResponse {
+    /// The generated text content
+    pub content: String,
+    /// Number of input/prompt tokens
+    pub prompt_tokens: u32,
+    /// Number of output/completion tokens
+    pub completion_tokens: u32,
+    /// Total tokens (prompt + completion)
+    pub total_tokens: u32,
 }
 
 impl VllmClient {
@@ -110,6 +133,21 @@ impl VllmClient {
             .await
     }
 
+    /// Generate a response with full token usage tracking.
+    ///
+    /// Returns LlmResponse with both content and token counts.
+    pub async fn generate_with_usage(
+        &self,
+        model: &str,
+        prompt: &str,
+        temperature: f32,
+        top_p: f32,
+        max_tokens: u32,
+    ) -> Result<LlmResponse> {
+        self.generate_with_system_and_usage(model, LATIN_SYSTEM_PROMPT, prompt, temperature, top_p, max_tokens)
+            .await
+    }
+
     /// Generate a response with a custom system prompt.
     ///
     /// Used by conversation.rs for agent-specific system prompts.
@@ -122,6 +160,24 @@ impl VllmClient {
         top_p: f32,
         max_tokens: u32,
     ) -> Result<String> {
+        let response = self
+            .generate_with_system_and_usage(model, system_prompt, user_prompt, temperature, top_p, max_tokens)
+            .await?;
+        Ok(response.content)
+    }
+
+    /// Generate a response with custom system prompt and full token usage tracking.
+    ///
+    /// Returns LlmResponse with both content and token counts.
+    pub async fn generate_with_system_and_usage(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+        temperature: f32,
+        top_p: f32,
+        max_tokens: u32,
+    ) -> Result<LlmResponse> {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -169,11 +225,20 @@ impl VllmClient {
             .await
             .context("Failed to parse vLLM response")?;
 
-        chat_response
+        let content = chat_response
             .choices
             .first()
             .map(|c| c.message.content.clone())
-            .context("No choices in vLLM response")
+            .context("No choices in vLLM response")?;
+
+        let usage = chat_response.usage.unwrap_or_default();
+
+        Ok(LlmResponse {
+            content,
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+        })
     }
 
     /// Check if the vLLM server is healthy.
