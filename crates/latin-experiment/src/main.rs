@@ -46,7 +46,7 @@ struct Cli {
     model_chain: Vec<String>,
 
     /// Ticks with zero progress before escalating to larger model
-    #[arg(long, default_value = "5")]
+    #[arg(long, default_value = "20")]
     escalation_threshold: usize,
 
     /// Enable verbose logging
@@ -119,6 +119,11 @@ enum Commands {
         /// Agent counts to test (comma-separated)
         #[arg(long, default_value = "1,2,4,8", value_delimiter = ',')]
         agents: Vec<usize>,
+
+        /// Strategies to test (comma-separated). Default: all
+        /// Valid: pressure_field, hierarchical, sequential, random, conversation
+        #[arg(long, value_delimiter = ',')]
+        strategies: Option<Vec<String>>,
     },
 
     /// Run ablation study
@@ -242,6 +247,7 @@ async fn main() -> Result<()> {
             max_turns,
             output,
             agents,
+            strategies: strategy_filter,
         } => {
             info!(
                 trials = trials,
@@ -251,7 +257,13 @@ async fn main() -> Result<()> {
             );
 
             let mut results = GridResults::new();
-            let strategies = Strategy::all();
+            let strategies: Vec<Strategy> = match strategy_filter {
+                Some(names) => names
+                    .iter()
+                    .filter_map(|s| parse_strategy(s).ok())
+                    .collect(),
+                None => Strategy::all(),
+            };
 
             let total = strategies.len() * agents.len() * trials;
             let mut completed = 0;
