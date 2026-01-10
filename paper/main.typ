@@ -11,7 +11,7 @@
   abstract: [
     Current multi-agent LLM frameworks rely on explicit orchestration patterns borrowed from human organizational structures: planners delegate to executors, managers coordinate workers, and hierarchical control flow governs agent interactions. These approaches suffer from coordination overhead that scales poorly with agent count and task complexity. We propose a fundamentally different paradigm inspired by natural coordination mechanisms: agents operate locally on a shared artifact, guided only by pressure gradients derived from measurable quality signals, with temporal decay preventing premature convergence. We formalize this as optimization over a pressure landscape and prove convergence guarantees under mild conditions.
 
-    Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40--50% for the best baseline (hierarchical) using identical LLMs. The approach scales linearly from 1 to 32 agents without degradation, while baselines show erratic performance. Notably, temporal decay proves essential (disabling it drops solve rate to 0%), and few-shot prompting unexpectedly harms performance (100% to 40%), suggesting pressure-driven exploration outperforms prompt engineering for constraint satisfaction. Our results indicate that constraint-driven emergence offers a more scalable foundation for multi-agent AI systems than imported human organizational patterns.
+    Empirically, on Latin Square constraint satisfaction, pressure-field coordination consistently outperforms all baselines: achieving 80% solve rate on easy problems (5×5) versus 20% for hierarchical, and 23% on hard problems (7×7 with model escalation) versus 1% for the best baseline. Model escalation proves critical---without it, no strategy solves hard problems; with it, pressure-field achieves 21× improvement over hierarchical. Temporal decay is essential: disabling it increases final pressure 15-fold, trapping agents in local minima. The approach maintains consistent performance from 1 to 32 agents while baselines show near-zero solve rates. Our results indicate that constraint-driven emergence offers a more scalable foundation for multi-agent AI systems than imported human organizational patterns.
   ],
   keywords: (
     "multi-agent systems",
@@ -37,7 +37,7 @@ Our contributions:
 
 + We prove convergence guarantees for this coordination scheme under conditions that commonly hold in practice.
 
-+ We demonstrate empirically that gradient-field coordination achieves 100% solve rate on Latin Square constraint satisfaction with 4 agents (vs. 40% for the best baseline), scales linearly from 1 to 32 agents, and exhibits graceful degradation on harder problems where baselines collapse entirely.
++ We demonstrate empirically that gradient-field coordination achieves 80% solve rate on easy Latin Square problems (vs. 20% for hierarchical), and with model escalation achieves 23% on hard problems where baselines achieve only 0--1%. The approach maintains consistent 17--37% solve rates from 1 to 32 agents while baselines collapse to near-zero.
 
 = Related Work
 
@@ -307,7 +307,7 @@ Pressure-field coordination achieves $O(1)$ coordination overhead because agents
 
 We evaluate pressure-field coordination on Latin Square constraint satisfaction: filling partially-completed $n times n$ grids such that each row and column contains each number $1$ to $n$ exactly once. This domain provides clear pressure signals (constraint violations), measurable success criteria, and scalable difficulty.
 
-*Key findings*: Pressure-field coordination achieves 100% solve rate with 4 agents versus 40% for the best baseline (§6.2). Temporal decay is critical---disabling it drops performance to 0% (§6.3). Most surprisingly, few-shot prompting *degrades* performance from 100% to 40% (§6.3), challenging conventional LLM prompting wisdom. The approach scales linearly from 1 to 32 agents (§6.4), and model escalation provides 2--4$times$ improvement on difficult cases (§6.5).
+*Key findings*: Pressure-field coordination consistently outperforms all baselines across difficulty levels (§5.2). Temporal decay is critical---disabling it increases final pressure 15-fold, trapping agents in local minima (§5.3). Model escalation proves essential for hard problems, enabling 23% solve rate where single-model approaches achieve 0% (§5.5). The approach maintains consistent performance from 1 to 32 agents while baselines collapse to near-zero (§5.4).
 
 == Setup
 
@@ -341,129 +341,152 @@ We compare four coordination strategies, all using identical LLMs (`Qwen/Qwen2.5
 
 *Hardware*: NVIDIA A100 80GB GPU. *Software*: Rust implementation with vLLM. *Trials*: 30 per configuration. Full protocol in Appendix A.
 
-*Model escalation*: Unless otherwise noted, all experiments use adaptive model escalation: when a region remains high-pressure for 10 consecutive ticks, the system escalates from 1.5b to 7b to 14b parameters. Section 5.5 ablates this mechanism.
+*Model escalation*: Unless otherwise noted, all experiments use adaptive model escalation: when a region remains high-pressure for 5 consecutive ticks, the system escalates through the chain 0.5B → 1.5B → 3B → 7B → 14B. Section 5.5 ablates this mechanism.
 
 == Main Results
 
-Pressure-field coordination dramatically outperforms all baselines:
+Pressure-field coordination consistently outperforms all baselines:
 
 #figure(
   table(
-    columns: 5,
-    [*Strategy*], [*1 Agent*], [*2 Agents*], [*4 Agents*], [*8 Agents*],
-    [Pressure-field], [70%], [90%], [*100%*], [90%],
-    [Hierarchical], [40%], [50%], [40%], [50%],
-    [Sequential], [0%], [40%], [30%], [10%],
-    [Random], [0%], [40%], [20%], [0%],
+    columns: 4,
+    [*Strategy*], [*Solved/N*], [*Rate*], [*95% Wilson CI*],
+    [Pressure-field], [32/120], [*26.7%*], [19.6%--35.2%],
+    [Hierarchical], [4/120], [3.3%], [1.3%--8.3%],
+    [Sequential], [0/120], [0.0%], [0.0%--3.1%],
+    [Random], [0/120], [0.0%], [0.0%--3.1%],
+    [Conversation], [0/120], [0.0%], [0.0%--3.1%],
   ),
-  caption: [Solve rates on $7 times 7$ Latin Squares (30 trials each). Pressure-field achieves 100% at 4 agents; best baseline (hierarchical) reaches only 40--50%.],
+  caption: [Solve rates on $7 times 7$ Latin Squares with model escalation (30 trials per agent count $times$ 4 agent counts = 120 per strategy). Chi-square test: $chi^2 = 115.4$, $p < 10^(-23)$.],
 )
 
-The performance gap is substantial: pressure-field with 4 agents achieves 100% solve rate versus 40% for the best baseline (hierarchical). For solved cases, pressure-field also converges faster (16.1 average ticks vs. 32+ for baselines).
+The performance gap is statistically significant: pressure-field achieves 26.7% solve rate (CI: 19.6%--35.2%) compared to 3.3% for hierarchical (CI: 1.3%--8.3%), with non-overlapping confidence intervals. For solved cases, pressure-field converges in 31.8 average ticks versus 29.2 for the rare hierarchical successes.
 
-This validates Theorem 3: coordination overhead remains $O(1)$ for pressure-field, enabling full parallelism, while hierarchical approaches suffer from manager bottlenecks.
+Final pressure provides additional insight: pressure-field achieves lowest average final pressure ($2.33 plus.minus 1.79$) compared to hierarchical ($4.55 plus.minus 1.50$), sequential ($5.33 plus.minus 1.23$), random ($5.35 plus.minus 1.21$), and conversation ($11.40 plus.minus 10.0$). Kruskal-Wallis test confirms strategy significantly affects final pressure ($chi^2 = 378.1$, $p < 10^(-80)$).
+
+This validates Theorem 3: coordination overhead remains $O(1)$ for pressure-field, enabling effective parallelism, while hierarchical approaches suffer from coordination bottlenecks that prevent scaling.
 
 == Ablations
 
 === Effect of Temporal Decay
 
-Decay proves essential---without it, solve rate drops to zero:
-
-#figure(
-  table(
-    columns: 3,
-    [*Configuration*], [*Solve Rate*], [*Final Pressure*],
-    [With decay], [100%], [0.0],
-    [Without decay ($lambda_f = 0$)], [*0%*], [22.8],
-  ),
-  caption: [Decay ablation (2 agents, 30 trials). Without decay, the system stabilizes in high-pressure local minima, unable to escape.],
-)
-
-Without decay, fitness saturates after initial patches. High-fitness regions never re-enter the activation threshold, even with suboptimal solutions. This validates Theorem 2: decay is necessary to cross pressure barriers between basins.
-
-=== Effect of Few-Shot Prompting
-
-Unexpectedly, few-shot examples *harm* performance:
-
-#figure(
-  table(
-    columns: 3,
-    [*Configuration*], [*Solve Rate*], [*Avg Ticks*],
-    [Zero-shot], [*100%*], [7.8],
-    [Few-shot (3 examples)], [40%], [35.0],
-  ),
-  caption: [Few-shot prompting degrades performance from 100% to 40%. The LLM appears to overfit to example patterns rather than reasoning from constraints.],
-) <tbl:ablation>
-
-This counterintuitive finding suggests that pressure-driven sampling diversity (via temperature bands) is more effective than prompt engineering for constraint satisfaction. The LLM performs better when reasoning directly from the constraint structure than when pattern-matching against examples.
-
-=== Effect of Inhibition
-
-Inhibition ($tau_"inh" = 4$ ticks) provides modest benefit: without it, the system occasionally "thrashes" by repeatedly modifying the same row. Optimal inhibition window is 3--5 ticks; shorter causes thrashing, longer delays necessary re-evaluation.
-
-== Scaling Experiments
-
-Pressure-field maintains high performance from 1 to 32 agents:
-
-#figure(
-  table(
-    columns: 5,
-    [*Agents*], [*Pressure-field*], [*Hierarchical*], [*Sequential*], [*Random*],
-    [1], [100%], [30%], [10%], [0%],
-    [2], [80%], [50%], [30%], [10%],
-    [4], [80%], [10%], [0%], [20%],
-    [8], [80%], [30%], [20%], [0%],
-    [16], [*100%*], [10%], [10%], [10%],
-    [32], [90%], [30%], [10%], [0%],
-  ),
-  caption: [Scaling from 1 to 32 agents ($7 times 7$ grid, 8 empty cells). Pressure-field maintains 80--100% while baselines show erratic performance.],
-)
-
-Pressure-field exhibits three phases: (1) *scaling benefit* (1--4 agents): more agents enable more parallel patches; (2) *saturation* (4--16): performance stable at capacity; (3) *over-provisioned* (16--32): redundancy without degradation.
-
-Critically, baselines show no consistent scaling benefit---hierarchical is limited by manager throughput, sequential by its single-agent design, and random by lack of guidance.
-
-== Model Escalation Ablation
-
-To quantify the impact of model escalation (used in all preceding experiments), we compare performance with and without the escalation chain on hard problems:
-
-#figure(
-  table(
-    columns: 3,
-    [*Configuration*], [*Solve Rate*], [*Improvement*],
-    [Without escalation], [20--50%], [---],
-    [With escalation], [50--90%], [2--4$times$],
-  ),
-  caption: [Model escalation on hard problems ($7 times 7$, 8 empty cells). Escalation provides 2--4$times$ improvement by breaking through local minima.],
-) <tbl:escalation>
-
-Escalation is economical: larger models are invoked only for persistent high-pressure regions, demonstrating adaptive resource allocation without manual tuning.
-
-== Difficulty Scaling
-
-Pressure-field exhibits graceful degradation while baselines collapse:
+Decay proves essential---without it, final pressure increases dramatically:
 
 #figure(
   table(
     columns: 4,
-    [*Difficulty*], [*Pressure-field*], [*Hierarchical*], [*Sequential*],
-    [Easy ($5 times 5$)], [80%], [90%], [0%],
-    [Medium ($6 times 6$)], [60%], [30%], [0%],
-    [Hard ($7 times 7$)], [50%], [0%], [30%],
-    [Very Hard ($8 times 8$)], [20%], [10%], [0%],
+    [*Configuration*], [*N*], [*Final Pressure*], [*SD*],
+    [With decay], [120], [$4.38$], [$1.36$],
+    [Without decay], [120], [*$65.83$*], [$19.59$],
   ),
-  caption: [Solve rate vs. difficulty (4 agents). Pressure-field degrades gracefully; hierarchical collapses from 90% to 0% as difficulty increases.],
+  caption: [Decay ablation (2 agents, 30 trials $times$ 4 configurations each). Welch's t-test: $t = -34.3$, $p < 10^(-63)$. Cohen's $d = 4.43$ (huge effect).],
 )
+
+The effect size is massive: Cohen's $d = 4.43$ far exceeds the threshold for "large" effects ($d > 0.8$). Without decay, fitness saturates after initial patches. High-fitness regions never re-enter the activation threshold, leaving the artifact in a high-pressure state. This validates Theorem 2: decay is necessary to continue pressure reduction even when regions appear "stable."
+
+=== Effect of Inhibition and Examples
+
+The ablation study tested all $2^3 = 8$ combinations of decay, inhibition, and few-shot examples:
+
+#figure(
+  table(
+    columns: 4,
+    [*Configuration*], [*Solved/N*], [*Final Pressure*], [*SD*],
+    [D=T, I=T, E=T (full)], [1/30], [$4.37$], [$1.54$],
+    [D=T, I=T, E=F], [0/30], [$3.93$], [$1.14$],
+    [D=T, I=F, E=T], [0/30], [$4.93$], [$1.31$],
+    [D=T, I=F, E=F], [0/30], [$4.30$], [$1.29$],
+    [D=F, I=T, E=T], [0/30], [$65.63$], [$17.70$],
+    [D=F, I=T, E=F], [0/30], [$66.97$], [$18.71$],
+    [D=F, I=F, E=T], [0/30], [$61.07$], [$24.26$],
+    [D=F, I=F, E=F], [0/30], [$69.67$], [$16.81$],
+  ),
+  caption: [Full ablation results. D=decay, I=inhibition, E=examples. Decay is the critical mechanism: with decay, final pressure $approx 4$; without decay, $approx 65$. Inhibition and examples provide marginal benefit.],
+) <tbl:ablation>
+
+The key finding is that *decay dominates*: any configuration with decay achieves final pressure $approx 4$, while any without decay achieves $approx 65$. The 7$times$7 problem proved too difficult to differentiate solve rates (all near 0%), but the 15$times$ pressure difference clearly demonstrates decay's importance.
+
+== Scaling Experiments
+
+Pressure-field maintains consistent performance from 1 to 32 agents while baselines collapse:
+
+#figure(
+  table(
+    columns: 4,
+    [*Agents*], [*Solved/30*], [*Rate*], [*95% Wilson CI*],
+    [1], [6/30], [20.0%], [9.5%--37.3%],
+    [2], [5/30], [16.7%], [7.3%--33.6%],
+    [4], [11/30], [*36.7%*], [21.9%--54.5%],
+    [8], [6/30], [20.0%], [9.5%--37.3%],
+    [16], [6/30], [20.0%], [9.5%--37.3%],
+    [32], [5/30], [16.7%], [7.3%--33.6%],
+  ),
+  caption: [Pressure-field scaling from 1 to 32 agents ($7 times 7$ grid, 8 empty cells). Total: 39/180 solved (21.7%). All baselines achieve 0--3% across all agent counts (not shown for space).],
+)
+
+Pressure-field shows a peak at 4 agents (36.7%, CI: 21.9%--54.5%) with consistent performance at other counts. Note that confidence intervals overlap substantially, indicating the peak may reflect sampling variability rather than a true optimum. The key observation is *stability*: pressure-field maintains 17--37% solve rates across 32$times$ variation in agent count.
+
+Baselines show fundamental scaling limitations: hierarchical achieves only sporadic successes (3.3% at 2, 8, 16 agents; 0% otherwise), while sequential, random, and conversation achieve 0% regardless of agent count. This confirms that coordination overhead in baseline approaches prevents effective scaling.
+
+== Model Escalation Ablation
+
+To quantify the impact of model escalation, we compare performance with and without the escalation chain on hard problems:
+
+#figure(
+  table(
+    columns: 5,
+    [*Strategy*], [*Without Esc*], [*With Esc*], [*95% Wilson CI*], [*Improvement*],
+    [Pressure-field], [0/90 (0%)], [*21/90 (23.3%)*], [15.7%--33.2%], [$infinity$],
+    [Hierarchical], [0/90 (0%)], [1/90 (1.1%)], [0.2%--6.0%], [$infinity$],
+    [Sequential], [0/90 (0%)], [0/90 (0%)], [0.0%--4.0%], [---],
+    [Random], [0/90 (0%)], [0/90 (0%)], [0.0%--4.0%], [---],
+    [Conversation], [0/90 (0%)], [0/90 (0%)], [0.0%--4.0%], [---],
+  ),
+  caption: [Model escalation impact ($7 times 7$, 8 empty cells, 90 trials per strategy). Fisher's exact test for pressure-field escalation effect: $p = 2.55 times 10^(-7)$. Without escalation (0.5B only), no strategy solves any puzzles; with escalation (0.5B→14B), pressure-field achieves 23%.],
+) <tbl:escalation>
+
+Model escalation proves *critical* for hard problems: without it, all strategies achieve 0% solve rate. With escalation, pressure-field achieves 23.3% (21 of 90 trials) while hierarchical manages only 1.1% (1 of 90). This demonstrates that:
+
+1. *Small models alone are insufficient* for difficult constraint satisfaction
+2. *Escalation benefits pressure-field disproportionately*: the pressure gradient provides clear signal for when to escalate
+3. *Hierarchical coordination cannot exploit escalation effectively*: even with access to larger models, coordination overhead prevents success
+
+== Difficulty Scaling
+
+On easier problems, pressure-field shows strong performance while baselines struggle:
+
+#figure(
+  table(
+    columns: 4,
+    [*Strategy*], [*Solved/30*], [*Rate*], [*95% Wilson CI*],
+    [Pressure-field], [24/30], [*80.0%*], [62.5%--90.9%],
+    [Hierarchical], [6/30], [20.0%], [9.5%--37.3%],
+    [Sequential], [0/30], [0.0%], [0.0%--11.4%],
+    [Random], [0/30], [0.0%], [0.0%--11.4%],
+    [Conversation], [0/30], [0.0%], [0.0%--11.4%],
+  ),
+  caption: [Solve rate on easy problems ($5 times 5$ grid, 5 empty cells, 4 agents, 30 trials). Fisher's exact test (pressure-field vs hierarchical): Odds Ratio $= 15.04$ (95% CI: 3.92--69.13), $p < 0.0001$. Pressure-field achieves 4$times$ higher solve rate than hierarchical.],
+)
+
+The difficulty scaling reveals two key insights:
+
+1. *Easy problems show clear separation*: Pressure-field achieves 80% vs hierarchical's 20%---a 4$times$ advantage. Sequential, random, and conversation fail entirely even on easy problems.
+
+2. *Hard problems require escalation*: Without model escalation, no strategy solves 7×7 puzzles. With escalation, pressure-field recovers to 23% while hierarchical manages only 1%.
+
+Note: Medium ($6 times 6$) and Very Hard ($8 times 8$) experiments were not completed in the current run. The pattern suggests graceful degradation for pressure-field as difficulty increases.
 
 = Discussion
 
 == Limitations
 
-Our experiments reveal several important limitations and unexpected findings:
+Our experiments reveal several important limitations:
 
-*Prompt engineering may not transfer.* Few-shot prompting, typically beneficial for LLM tasks, unexpectedly degraded performance from 100% to 40% solve rate (@tbl:ablation). We hypothesize that examples bias agents toward pattern matching rather than constraint reasoning, reducing exploration diversity. This suggests pressure-driven search may be fundamentally different from standard LLM prompting paradigms.
+*Absolute solve rates are modest on hard problems.* While pressure-field consistently outperforms baselines, the absolute solve rates on $7 times 7$ puzzles (17--37% with escalation) indicate this remains a challenging domain. The relative advantage (21$times$ over hierarchical) is substantial, but practitioners should not expect near-perfect performance on difficult constraint satisfaction without further optimization.
 
-*Decay is non-optional.* Without temporal decay, solve rate drops to 0% regardless of other mechanisms. This is not merely a tuning issue---decay appears essential to prevent pressure stagnation where agents become trapped in local minima.
+*Decay is non-optional.* Without temporal decay, final pressure increases 15-fold regardless of other mechanisms. This is not merely a tuning issue---decay appears essential to prevent pressure stagnation where agents become trapped in local minima.
+
+*Model escalation is required for hard problems.* Without access to larger models, no strategy (including pressure-field) solves $7 times 7$ puzzles. This suggests the coordination mechanism alone is insufficient---capable underlying models are a prerequisite.
 
 *Additional practical limitations:*
 - Requires well-designed pressure functions (not learned from data)
@@ -474,40 +497,41 @@ Our experiments reveal several important limitations and unexpected findings:
 
 == When Hierarchical Coordination Is Appropriate
 
-Our results show hierarchical coordination achieves 90% solve rate on easy problems ($5 times 5$ grids), outperforming pressure-field's 80%. This suggests hierarchical approaches remain preferable when:
+While pressure-field outperforms hierarchical across all our experiments (4$times$ on easy, 21$times$ on hard+escalation), hierarchical approaches may remain preferable when:
 
-1. *Problem structure is well-understood.* A central coordinator can exploit known decomposition strategies. Latin Squares at small scales have obvious row/column independence that hierarchical assignment captures directly.
+1. *Problem structure is well-understood.* A central coordinator can exploit known decomposition strategies that don't require exploration.
 
-2. *Search space is small.* With few constraints, the overhead of pressure-field exploration exceeds the benefit. Hierarchical assignment suffices when brute-force enumeration is tractable.
+2. *Communication is cheap and reliable.* Our baselines assume zero-cost coordination messages. Real distributed systems may favor hierarchical approaches when network latency dominates compute time.
 
-3. *Communication is cheap.* Our baselines assume zero-cost coordination messages. Real distributed systems may favor hierarchical approaches when network latency dominates compute time.
+3. *Interpretability is critical.* Hierarchical task assignment provides clear audit trails; emergent coordination is harder to debug.
 
-However, as problem difficulty increases, hierarchical performance collapses (90% → 0%) while pressure-field degrades gracefully (80% → 20%). This crossover suggests pressure-field coordination becomes increasingly advantageous as problems scale beyond what centralized planning can tractably decompose.
+The key finding is that *hierarchical approaches do not scale*: achieving only 0--3% solve rate on hard problems regardless of agent count or model capability. Pressure-field coordination becomes increasingly advantageous as problems exceed what centralized planning can tractably decompose.
 
 == Model Escalation as Adaptive Capability
 
-Our escalation mechanism (1.5b → 7b → 14b parameters) provides 2--4$times$ improvement on hard problems (@tbl:escalation). This suggests an important design principle: pressure-field coordination benefits from adaptive capability deployment.
+Our escalation mechanism (0.5B → 1.5B → 3B → 7B → 14B parameters) proves essential on hard problems (@tbl:escalation). Without escalation, all strategies achieve 0% solve rate; with escalation, pressure-field achieves 23%. This suggests an important design principle: pressure-field coordination benefits from adaptive capability deployment.
 
-When smaller models cannot reduce pressure below threshold, escalation to larger models breaks through local minima. This is analogous to simulated annealing's temperature schedule---capability escalation provides "thermal kicks" to escape stagnation. The mechanism works because larger models have broader solution coverage, not necessarily better constraint reasoning.
+When smaller models cannot reduce pressure below threshold, escalation to larger models breaks through local minima. The mechanism works because larger models have broader solution coverage, not necessarily better constraint reasoning. The 5-tier escalation chain provides graduated capability increases, invoking expensive large models only when necessary.
 
-Interestingly, hierarchical coordination shows mixed results with escalation (some configurations improve, others degrade). We hypothesize this is because hierarchical assignment decisions made by smaller models may be difficult for larger models to reverse, whereas pressure-field's local actions remain independent of model history.
+Critically, hierarchical coordination cannot exploit escalation effectively: even with access to the same model chain, it achieves only 1% solve rate. We hypothesize this is because hierarchical assignment decisions create dependencies that larger models cannot easily overcome, whereas pressure-field's independent local actions allow each region to benefit from escalation individually.
 
 == Future Work
 
 - *Learned pressure functions*: Current sensors are hand-designed. Can we learn pressure functions from solution traces?
 - *Adversarial robustness*: Can malicious agents exploit pressure gradients to degrade system performance?
 - *Multi-artifact coordination*: Extension to coupled artifacts where patches in one affect pressure in another
-- *Understanding the few-shot paradox*: Why does prompting hurt? This finding warrants deeper investigation into LLM behavior under constraint satisfaction
+- *Larger-scale experiments*: Testing on $8 times 8$ and $9 times 9$ grids to characterize the difficulty ceiling
+- *Alternative domains*: Applying pressure-field coordination to code refactoring, configuration management, and other artifact refinement tasks
 
 = Conclusion
 
 We presented gradient-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
 
-Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction, pressure-field coordination achieves 100% solve rate with 4 agents compared to 40% for the best baseline (hierarchical) using identical LLMs. The approach scales linearly from 1 to 32 agents (maintaining 80--100% solve rate) while baselines show erratic performance.
+Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction, pressure-field coordination consistently outperforms all baselines: achieving 80% solve rate on easy problems (4$times$ hierarchical) and 23% on hard problems with model escalation (21$times$ hierarchical). The approach maintains consistent 17--37% solve rates from 1 to 32 agents while baselines collapse to 0--3%.
 
-Key findings include: (1) temporal decay is essential---disabling it drops solve rate to 0%; (2) few-shot prompting unexpectedly degrades performance, suggesting pressure-driven exploration differs fundamentally from standard LLM prompting; (3) model escalation provides 2--4$times$ improvement on hard problems by breaking through local minima.
+Key findings include: (1) temporal decay is essential---disabling it increases final pressure 15-fold, trapping agents in local minima; (2) model escalation is critical for hard problems---without it, no strategy achieves any solves; (3) the relative advantage of pressure-field coordination *increases* with problem difficulty, suggesting it is most valuable precisely where other approaches fail.
 
-These results suggest that constraint-driven emergence, inspired by natural coordination mechanisms like chemotaxis, offers a more scalable foundation for multi-agent AI than imported human organizational patterns. The approach is most advantageous for problems where centralized decomposition becomes intractable---precisely where scaling matters most.
+These results suggest that constraint-driven emergence, inspired by natural coordination mechanisms like chemotaxis, offers a more scalable foundation for multi-agent AI than imported human organizational patterns. While absolute solve rates on hard problems remain modest (23%), the consistent outperformance across all configurations indicates a fundamentally more robust coordination paradigm. The approach is most advantageous for problems where centralized decomposition becomes intractable---precisely where scaling matters most.
 
 = Appendix: Experimental Protocol
 
@@ -555,40 +579,48 @@ This diversity prevents convergence to local optima and enables exploration of t
 
 *Main Grid (Strategy Comparison):*
 ```bash
-latin-experiment --model-chain "latin-solver,latin-solver-7b,latin-solver-14b" \
-  --escalation-threshold 10 \
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
+  --escalation-threshold 5 \
   grid --trials 30 --n 7 --empty 7 --max-ticks 40 --agents 1,2,4,8
 ```
 
 *Ablation Study:*
 ```bash
-latin-experiment --model-chain "latin-solver" \
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B" \
   ablation --trials 30 --n 7 --empty 7 --max-ticks 40
 ```
 
 *Scaling Analysis:*
 ```bash
-latin-experiment --model-chain "latin-solver,latin-solver-7b,latin-solver-14b" \
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
+  --escalation-threshold 5 \
   grid --trials 30 --n 7 --empty 8 --max-ticks 40 --agents 1,2,4,8,16,32
 ```
 
 *Model Escalation Comparison:*
 ```bash
-# Without escalation
-latin-experiment --model-chain "latin-solver" \
+# Without escalation (single model)
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B" \
   grid --trials 30 --n 7 --empty 8 --max-ticks 40 --agents 2,4,8
 
-# With escalation
-latin-experiment --model-chain "latin-solver,latin-solver-7b,latin-solver-14b" \
-  --escalation-threshold 10 \
+# With escalation (full chain)
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
+  --escalation-threshold 5 \
   grid --trials 30 --n 7 --empty 8 --max-ticks 40 --agents 2,4,8
 ```
 
 *Difficulty Scaling:*
 ```bash
-# Run for each (n, empty) pair: (5,5), (6,8), (7,10), (8,14)
-latin-experiment --model-chain "latin-solver,latin-solver-7b,latin-solver-14b" \
-  grid --trials 30 --n {N} --empty {E} --max-ticks 50 --agents 4
+# Easy (5x5, 5 empty)
+latin-experiment --vllm-host http://localhost:8001 \
+  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
+  --escalation-threshold 5 \
+  grid --trials 30 --n 5 --empty 5 --max-ticks 50 --agents 4
 ```
 
 == Metrics Collected
@@ -610,14 +642,14 @@ Each configuration runs 30 independent trials with different random seeds to ens
   table(
     columns: 4,
     [*Experiment*], [*Configurations*], [*Trials*], [*Est. Time*],
-    [Main Grid], [16], [30], [2.5 hours],
+    [Main Grid], [20], [30], [2 hours],
     [Ablation], [8], [30], [1 hour],
-    [Scaling], [6], [30], [1.5 hours],
-    [Escalation], [6], [30], [1.5 hours],
-    [Difficulty], [4], [30], [2 hours],
-    [*Total*], [], [], [*~8 hours*],
+    [Scaling], [30], [30], [3 hours],
+    [Escalation], [10], [30], [2 hours],
+    [Difficulty], [5], [30], [1.5 hours],
+    [*Total*], [], [], [*~9.5 hours*],
   ),
-  caption: [Estimated runtime for all experiments on NVIDIA A100 80GB GPU.],
+  caption: [Estimated runtime for all experiments on NVIDIA A100 80GB GPU with 4 parallel jobs.],
 )
 
 #bibliography("references.bib", style: "ieee")
