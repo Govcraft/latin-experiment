@@ -13,10 +13,12 @@ results/
 
 # Typst
 *.pdf
+!paper/rodriguez-pressure-field-coordination-2026.pdf
 
 # Text and markdown files
 *.txt
 *.md
+!README.md
 
 # Hidden directories (ignore all except explicitly allowed)
 .*/

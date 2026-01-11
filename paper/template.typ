@@ -4,6 +4,7 @@
 #let neurips(
   title: none,
   authors: (),
+  date: none,
   abstract: none,
   keywords: (),
   body,
@@ -116,6 +117,10 @@
         }
         v(0.5em)
       }
+    }
+    #if date != none {
+      v(0.3em)
+      text(size: 10pt)[#date]
     }
     #v(1em)
   ]
