@@ -10,7 +10,7 @@ This repository contains the code and experiments for the paper:
 
 ## Key Finding
 
-Implicit coordination through shared pressure gradients matches explicit hierarchical control (38.2% vs 38.8% solve rate, p=0.94) while dramatically outperforming dialogue-based multi-agent coordination (8.6%). Temporal decay is essential—disabling it increases final pressure 49-fold.
+Implicit coordination through shared pressure fields matches explicit hierarchical control (38.2% vs 38.8% solve rate, p=0.94) while dramatically outperforming dialogue-based multi-agent coordination (8.6%). Temporal decay is essential—disabling it increases final pressure 49-fold.
 
 ## What's Here
 
@@ -40,7 +40,7 @@ cargo run -p latin-experiment -- --help
 Traditional multi-agent LLM frameworks use explicit orchestration: planners, managers, message-passing. We take a different approach inspired by stigmergy (ant colonies, immune systems):
 
 1. **Shared artifact** — agents modify a common workspace
-2. **Pressure gradients** — local quality signals guide action
+2. **Local pressure** — quality signals guide greedy action
 3. **Temporal decay** — prevents premature convergence
 4. **No communication** — coordination emerges from shared state
 
