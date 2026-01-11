@@ -1,0 +1,9 @@
+{
+    "timestamp": "20260110-165547",
+    "trials": 30,
+    "parallel": 10,
+    "model_chain": "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B",
+    "escalation_threshold": 20,
+    "hostname": "f11d40f05aca",
+    "gpu": "NVIDIA A100-SXM4-80GB"
+}

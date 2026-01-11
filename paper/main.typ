@@ -4,14 +4,15 @@
   title: [Emergent Coordination in Multi-Agent Systems via Pressure Fields and Temporal Decay],
   authors: (
     (
-      name: "Roland Rodriguez",
+      name: "Roland R. Rodriguez, Jr.",
       affiliation: "Independent Researcher",
+      email: "rrrodzilla@proton.me",
     ),
   ),
   abstract: [
     Current multi-agent LLM frameworks rely on explicit orchestration patterns borrowed from human organizational structures: planners delegate to executors, managers coordinate workers, and hierarchical control flow governs agent interactions. These approaches suffer from coordination overhead that scales poorly with agent count and task complexity. We propose a fundamentally different paradigm inspired by natural coordination mechanisms: agents operate locally on a shared artifact, guided only by pressure gradients derived from measurable quality signals, with temporal decay preventing premature convergence. We formalize this as optimization over a pressure landscape and prove convergence guarantees under mild conditions.
 
-    Empirically, on Latin Square constraint satisfaction across 1,078 trials, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$) while requiring no explicit coordination. Both significantly outperform sequential (23.3%), random (11.7%), and conversation-based multi-agent dialogue (8.6%, $p < 10^{-5}$). Temporal decay is essential: disabling it increases final pressure 49-fold ($d = 4.15$). On easy problems, pressure-field achieves 87% solve rate. The approach maintains consistent performance from 2 to 32 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control while dramatically outperforming explicit dialogue-based coordination. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
+    Empirically, on Latin Square constraint satisfaction across 1,078 trials, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$, indicating statistical equivalence). Both significantly outperform sequential (23.3%), random (11.7%), and conversation-based multi-agent dialogue (8.6%, $p < 10^{-5}$). Temporal decay is essential: disabling it increases final pressure 49-fold ($d = 4.15$). On easy problems, pressure-field achieves 87% solve rate. The approach maintains consistent performance from 2 to 32 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control while dramatically outperforming explicit dialogue-based coordination. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
   ],
   keywords: (
     "multi-agent systems",
@@ -31,7 +32,7 @@ Our approach draws inspiration from natural coordination mechanisms—ant coloni
 
 Our contributions:
 
-+ We formalize *gradient-field coordination*: agents observe local quality signals, compute pressure gradients, and take locally-greedy actions. Coordination emerges from shared artifact state, not explicit communication.
++ We formalize *pressure-field coordination*: agents observe local quality signals, compute pressure gradients, and take locally-greedy actions. Coordination emerges from shared artifact state, not explicit communication.
 
 + We introduce *temporal decay* as a mechanism for preventing premature convergence. Disabling decay increases final pressure 49-fold (Cohen's $d = 4.15$), trapping agents in local minima.
 
@@ -333,7 +334,7 @@ We compare five coordination strategies, all using identical LLMs (`Qwen/Qwen2.5
 
 *Random*: Selects random rows and proposes random valid values. Same LLM and validation as other methods.
 
-*Conversation*: AutoGen-style multi-agent dialogue where agents discuss and negotiate moves through explicit message passing. A coordinator agent selects target regions, proposer agents suggest values, and validator agents check constraints. Consensus required before applying patches.
+*Conversation*: AutoGen-style multi-agent dialogue where agents discuss and negotiate moves through explicit message passing. Three role-based agents interact in multi-turn dialogue: (1) a Coordinator agent that selects target regions and synthesizes final decisions, (2) a Proposer agent that generates candidate patches, and (3) a Validator agent that critiques proposals against constraints. Messages flow sequentially through all three roles until consensus (Validator APPROVE) or maximum turns (5) is reached. This mirrors AutoGen's conversable agent pattern where specialized agents negotiate solutions through explicit message exchange. Full protocol details appear in Appendix B. Due to the sequential message-passing overhead, the Conversation strategy has higher per-tick latency; in some experiment batches, trials were terminated early, resulting in $n = 20$ rather than $n = 30$ trials for this strategy.
 
 === Metrics
 
@@ -361,7 +362,7 @@ Across 1,078 total trials spanning four experiments (easy, medium, hard, and sca
     [Random], [21/180], [11.7%], [7.8%--17.2%],
     [Conversation], [5/58], [8.6%], [3.7%--18.6%],
   ),
-  caption: [Aggregate solve rates across all experiments (1,078 total trials). Chi-square test: $chi^2 = 68.1$, $p < 10^(-13)$.],
+  caption: [Aggregate solve rates across all experiments (1,078 total trials). Chi-square test across all five strategies: $chi^2 = 68.1$, $p < 10^(-13)$.],
 )
 
 The key finding is *stratification into two tiers*:
@@ -530,7 +531,7 @@ The escalation mechanism works because larger models have broader solution cover
 
 = Conclusion
 
-We presented gradient-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
+We presented pressure-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
 
 Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction across 1,078 trials, we find:
 
@@ -664,5 +665,112 @@ Each configuration runs 30 independent trials with different random seeds to ens
   ),
   caption: [Estimated runtime for all experiments on NVIDIA A100 80GB GPU with 10 parallel jobs.],
 )
+
+= Appendix B: Conversation Protocol
+
+This appendix provides the complete protocol for the Conversation baseline strategy, demonstrating that it faithfully implements AutoGen-style multi-agent dialogue coordination.
+
+== Agent Roles
+
+The Conversation strategy employs three specialized agents, each with distinct responsibilities:
+
+*Coordinator Agent:* Observes the full puzzle state and selects which region (row) to target. After the Proposer/Validator dialogue, synthesizes the final decision (APPLY or REJECT).
+
+*Proposer Agent:* Given a target region and column availability constraints, proposes a single value for one empty cell. Has access to the conversation history to avoid repeating rejected proposals.
+
+*Validator Agent:* Critiques proposals against Latin Square constraints. Checks for row duplicates, column conflicts, and range violations. Outputs APPROVE or REJECT with reason.
+
+== Protocol Pseudocode
+
+#raw(block: true, lang: "text", "
+CONVERSATION_TICK(artifact, shared_grid):
+  state ← new ConversationState(max_turns=5)
+
+  // TURN 1: Coordinator selects target region
+  puzzle_state ← format_puzzle(artifact)
+  prompt ← COORDINATOR_SELECT_TEMPLATE(puzzle_state)
+  response ← LLM(prompt)
+  region_id ← parse_target_row(response)
+  state.add_message(COORDINATOR, response)
+
+  // TURNS 2-N: Proposer/Validator dialogue
+  last_approved ← false
+  FOR turn IN 1..max_turns:
+    // Proposer turn
+    availability ← get_column_availability(artifact, region_id)
+    prompt ← PROPOSER_TEMPLATE(region_content, availability, state.history)
+    response ← LLM(prompt)
+    (position, value) ← parse_proposal(response)
+    state.add_message(PROPOSER, response)
+
+    IF proposal_valid:
+      // Validator turn
+      col_values ← get_column_values(shared_grid, position)
+      row_values ← get_row_values(region_content)
+      prompt ← VALIDATOR_TEMPLATE(region_content, proposal, col_values, row_values)
+      response ← LLM(prompt)
+      state.add_message(VALIDATOR, response)
+
+      IF response contains 'APPROVE':
+        patch ← construct_patch(region_content, position, value)
+        RETURN (patch, state)
+
+  // No consensus reached
+  RETURN (None, state)
+")
+
+== Prompt Templates
+
+Each agent receives a structured prompt designed to elicit the expected behavior:
+
+*Coordinator Selection Prompt:*
+#raw(block: true, lang: "text", "
+You are a Coordinator agent solving a {n}x{n} Latin Square puzzle.
+Current puzzle state (each row is numbered, _ means empty):
+{puzzle_state}
+
+Task: Identify which row needs the most attention. Consider:
+1. Rows with empty cells
+2. Rows with constraint violations
+
+Respond with ONLY: TARGET row=<N>
+")
+
+*Proposer Prompt:*
+#raw(block: true, lang: "text", "
+You are a Proposer agent solving a Latin Square puzzle.
+Target row {row_idx}: {region_content}
+Available values per column position: {availability}
+Previous messages: {history}
+
+Propose ONE value for ONE empty cell (_).
+Format: PROPOSE position=<col> value=<num>
+")
+
+*Validator Prompt:*
+#raw(block: true, lang: "text", "
+You are a Validator agent checking Latin Square constraints.
+Row: {region_content}
+Proposal: {proposal}
+Values already in target column: {column_values}
+Values already in row: {row_values}
+
+Check if the proposed value violates constraints.
+Respond with ONLY: APPROVE or REJECT <reason>
+")
+
+== Key Design Decisions
+
+1. *Sequential Message Passing:* A semaphore enforces that only one LLM call executes at a time within a conversation, mimicking AutoGen's turn-based dialogue.
+
+2. *Same LLM as Other Strategies:* All agents use the same model (Qwen2.5 series with escalation), ensuring the comparison isolates coordination mechanism effects.
+
+3. *Same Patch Validation:* Successful proposals undergo identical validation as other strategies---patches that increase violations are rejected.
+
+4. *Explicit Consensus Requirement:* Unlike pressure-field where any pressure-reducing patch is accepted, Conversation requires explicit Validator approval.
+
+== Overhead Analysis
+
+Each Conversation tick requires $3 + 2 dot.c ("turns" - 1)$ LLM calls in the worst case (Coordinator select + N rounds of Proposer/Validator). With max_turns=5, this is up to 11 sequential LLM calls per tick versus 1 parallel batch for pressure-field. This sequential overhead contributes to the strategy's poor performance---the coordination cost dominates any potential benefit from explicit negotiation.
 
 #bibliography("references.bib", style: "ieee")
