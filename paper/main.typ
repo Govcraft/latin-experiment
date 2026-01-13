@@ -140,11 +140,11 @@ $ f_i^(t+1) = f_i^t dot.c e^(-lambda_f) , quad gamma_i^(t+1) = gamma_i^t dot.c e
 
 where $lambda_f, lambda_gamma > 0$ are decay rates. Decay ensures that stability requires continuous reinforcement.
 
-*Phase 2: Action.* For each region $i$ where pressure exceeds activation threshold ($P_i > tau_"act"$) and the region is not inhibited, *each actor* $a_k: cal(C) times cal(H) times RR^d -> cal(C)$ proposes a content transformation in parallel. Each actor observes only local state $(c_i, h_i, sigma(c_i))$---actors do not communicate or coordinate their proposals.
+*Phase 2: Proposal.* For each region $i$ where pressure exceeds activation threshold ($P_i > tau_"act"$) and the region is not inhibited, *each actor* $a_k: cal(C) times cal(H) times RR^d -> cal(C)$ proposes a content transformation in parallel. Each actor observes only local state $(c_i, h_i, sigma(c_i))$---actors do not communicate or coordinate their proposals.
 
-*Phase 2b: Parallel Validation.* When multiple patches are proposed, each is validated on an independent *fork* of the artifact. Forks are created by cloning artifact state; validation (e.g., compilation, test execution) proceeds in parallel across forks. This addresses a fundamental resource constraint: a single artifact cannot be used to test multiple patches simultaneously without cloning.
+*Phase 3: Validation.* When multiple patches are proposed, each is validated on an independent *fork* of the artifact. Forks are created by cloning artifact state; validation proceeds in parallel across forks. This addresses a fundamental resource constraint: a single artifact cannot be used to test multiple patches simultaneously without cloning.
 
-*Phase 3: Reinforcement.* Regions where actions were applied receive fitness and confidence boosts, and enter an inhibition period preventing immediate re-modification:
+*Phase 4: Reinforcement.* Regions where actions were applied receive fitness and confidence boosts, and enter an inhibition period preventing immediate re-modification:
 
 $ f_i^(t+1) = min(f_i^t + Delta_f, 1), quad gamma_i^(t+1) = min(gamma_i^t + Delta_gamma, 1) $
 
