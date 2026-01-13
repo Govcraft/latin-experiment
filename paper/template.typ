@@ -102,7 +102,7 @@
     #v(0.5in)
     // Title: no justification or hyphenation—prevents rivers in display text
     #set par(justify: false)
-    #text(size: 17pt, weight: "bold", tracking: 0.01em, spacing: 100%, hyphenate: false)[#title]
+    #text(size: 16pt, weight: "bold", tracking: 0.01em, spacing: 100%, hyphenate: false)[#title]
     #v(1em)
 
     #if authors.len() > 0 {
