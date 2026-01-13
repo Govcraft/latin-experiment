@@ -10,23 +10,25 @@
 //! 6. TickComplete
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use acton_reactive::prelude::*;
+use dashmap::DashMap;
 use mti::prelude::*;
 use tracing::{debug, info, trace, warn};
 
 // RegionActor import used by AsyncKernelBuilder (spawns RegionActors externally)
+use std::collections::HashSet;
+
 use crate::artifact::Artifact;
 use crate::config::KernelConfig;
 use crate::kernel::TickResult;
 use crate::messages::{
     ApplyDecay, MeasureRegion, MeasurementResult, PatchProposal, PressureResponse,
     ProposeForRegion, QueryPressure, RegionApplyPatch, RegionPatchResult, RegisterPatchActor,
-    RegisterRegionActors, RegisterTickDriver, SaveArtifact, SetOutputDir, Tick, TickComplete,
-    ValidatePatch, ValidatePatchResponse,
+    RegisterRegionActors, RegisterTickDriver, SaveArtifact, SensorReady, SetOutputDir, Tick,
+    TickComplete, ValidatePatch, ValidatePatchResponse,
 };
-use crate::pressure::{PressureVector, Sensor};
+use crate::pressure::PressureVector;
 use crate::region::{Patch, RegionId, RegionView};
 
 /// Compute velocity (dP/dt) from pressure history.
@@ -153,30 +155,27 @@ impl PendingPatches {
 }
 
 /// Actor state for KernelCoordinator.
-#[derive(Default)]
 pub struct KernelCoordinatorState {
     /// Kernel configuration
     config: Option<KernelConfig>,
     /// The artifact being coordinated
     artifact: Option<Box<dyn Artifact>>,
     /// Handles to RegionActors (one per region)
-    region_actors: HashMap<RegionId, ActorHandle>,
-    /// Handles to sensor actors
-    sensor_handles: Vec<ActorHandle>,
+    region_actors: DashMap<RegionId, ActorHandle>,
+    /// Registered sensor IDs (sensors self-register via SensorReady broadcast)
+    registered_sensors: HashSet<String>,
     /// Handles to patch actors
     patch_actor_handles: Vec<ActorHandle>,
-    /// Number of registered sensors (for calculating expected responses)
-    sensor_count: usize,
     /// Number of registered actors (for calculating expected responses)
     actor_count: usize,
     /// Pending measurement requests by correlation ID
-    pending_measurements: HashMap<String, PendingMeasurements>,
+    pending_measurements: DashMap<String, PendingMeasurements>,
     /// Pending pressure queries by correlation ID
-    pending_pressure_queries: HashMap<String, PendingPressureQueries>,
+    pending_pressure_queries: DashMap<String, PendingPressureQueries>,
     /// Pending proposal requests by correlation ID
-    pending_proposals: HashMap<String, PendingProposals>,
+    pending_proposals: DashMap<String, PendingProposals>,
     /// Pending patch applications by correlation ID
-    pending_patches: HashMap<String, PendingPatches>,
+    pending_patches: DashMap<String, PendingPatches>,
     /// Handle to tick driver for sending TickComplete
     tick_driver: Option<ActorHandle>,
     /// Consecutive ticks with no patches (for stability)
@@ -191,21 +190,69 @@ pub struct KernelCoordinatorState {
     velocity_history: Vec<f64>,
 }
 
+impl Default for KernelCoordinatorState {
+    fn default() -> Self {
+        Self {
+            config: None,
+            artifact: None,
+            region_actors: DashMap::new(),
+            registered_sensors: HashSet::new(),
+            patch_actor_handles: Vec::new(),
+            actor_count: 0,
+            pending_measurements: DashMap::new(),
+            pending_pressure_queries: DashMap::new(),
+            pending_proposals: DashMap::new(),
+            pending_patches: DashMap::new(),
+            tick_driver: None,
+            stable_ticks: 0,
+            current_tick: 0,
+            output_dir: None,
+            pressure_history: Vec::new(),
+            velocity_history: Vec::new(),
+        }
+    }
+}
+
 impl Clone for KernelCoordinatorState {
     fn clone(&self) -> Self {
+        // Clone DashMaps by iterating and collecting
+        let region_actors = DashMap::new();
+        for entry in self.region_actors.iter() {
+            region_actors.insert(*entry.key(), entry.value().clone());
+        }
+
+        let pending_measurements = DashMap::new();
+        for entry in self.pending_measurements.iter() {
+            pending_measurements.insert(entry.key().clone(), entry.value().clone());
+        }
+
+        let pending_pressure_queries = DashMap::new();
+        for entry in self.pending_pressure_queries.iter() {
+            pending_pressure_queries.insert(entry.key().clone(), entry.value().clone());
+        }
+
+        let pending_proposals = DashMap::new();
+        for entry in self.pending_proposals.iter() {
+            pending_proposals.insert(entry.key().clone(), entry.value().clone());
+        }
+
+        let pending_patches = DashMap::new();
+        for entry in self.pending_patches.iter() {
+            pending_patches.insert(entry.key().clone(), entry.value().clone());
+        }
+
         Self {
             config: self.config.clone(),
             artifact: None, // Can't clone trait object
-            region_actors: self.region_actors.clone(),
+            region_actors,
             tick_driver: self.tick_driver.clone(),
-            sensor_handles: self.sensor_handles.clone(),
+            registered_sensors: self.registered_sensors.clone(),
             patch_actor_handles: self.patch_actor_handles.clone(),
-            sensor_count: self.sensor_count,
             actor_count: self.actor_count,
-            pending_measurements: self.pending_measurements.clone(),
-            pending_pressure_queries: self.pending_pressure_queries.clone(),
-            pending_proposals: self.pending_proposals.clone(),
-            pending_patches: self.pending_patches.clone(),
+            pending_measurements,
+            pending_pressure_queries,
+            pending_proposals,
+            pending_patches,
             stable_ticks: self.stable_ticks,
             current_tick: self.current_tick,
             output_dir: self.output_dir.clone(),
@@ -221,10 +268,13 @@ impl std::fmt::Debug for KernelCoordinatorState {
             .field("config", &self.config.is_some())
             .field("region_actors", &self.region_actors.len())
             .field("artifact", &self.artifact.is_some())
-            .field("sensor_handles", &self.sensor_handles.len())
+            .field("registered_sensors", &self.registered_sensors.len())
             .field("patch_actor_handles", &self.patch_actor_handles.len())
             .field("pending_measurements", &self.pending_measurements.len())
-            .field("pending_pressure_queries", &self.pending_pressure_queries.len())
+            .field(
+                "pending_pressure_queries",
+                &self.pending_pressure_queries.len(),
+            )
             .field("pending_proposals", &self.pending_proposals.len())
             .field("pending_patches", &self.pending_patches.len())
             .field("stable_ticks", &self.stable_ticks)
@@ -236,18 +286,19 @@ impl std::fmt::Debug for KernelCoordinatorState {
 ///
 /// Orchestrates the tick loop with RegionActors:
 /// 1. On Tick: broadcast ApplyDecay to RegionActors
-/// 2. Broadcast MeasureRegion to sensors (results route to RegionActors)
+/// 2. Broadcast MeasureRegion (sensors subscribe via broker)
 /// 3. Query QueryPressure from all RegionActors
 /// 4. On PressureResponse: find high-pressure regions, broadcast ProposeForRegion
 /// 5. On PatchProposal: send RegionApplyPatch to target RegionActors
 /// 6. On RegionPatchResult: update artifact, send TickComplete
+///
+/// Sensors register themselves by broadcasting `SensorReady` on start.
+/// The coordinator subscribes to this message to track sensor count.
 pub struct KernelCoordinator {
     /// Kernel configuration
     pub config: KernelConfig,
     /// The artifact being coordinated
     pub artifact: Box<dyn Artifact>,
-    /// Registered sensors (will be wrapped in SensorActors)
-    pub sensors: Vec<Arc<dyn Sensor>>,
     /// Pre-spawned patch actor handles
     pub patch_actor_handles: Vec<ActorHandle>,
 }
@@ -258,14 +309,8 @@ impl KernelCoordinator {
         Self {
             config,
             artifact,
-            sensors: Vec::new(),
             patch_actor_handles: Vec::new(),
         }
-    }
-
-    /// Register a sensor.
-    pub fn add_sensor(&mut self, sensor: Arc<dyn Sensor>) {
-        self.sensors.push(sensor);
     }
 
     /// Register a pre-spawned patch actor handle.
@@ -273,51 +318,43 @@ impl KernelCoordinator {
         self.patch_actor_handles.push(handle);
     }
 
-    /// Spawn this coordinator, sensor actors, and region actors.
+    /// Spawn this coordinator.
+    ///
+    /// Sensors should be spawned separately using `SensorActor::spawn()`.
+    /// They will self-register via `SensorReady` broadcast.
     pub async fn spawn(self, runtime: &mut ActorRuntime) -> ActorHandle {
-        let mut actor = runtime.new_actor_with_name::<KernelCoordinatorState>(
-            "KernelCoordinator".to_string(),
-        );
+        let mut actor =
+            runtime.new_actor_with_name::<KernelCoordinatorState>("KernelCoordinator".to_string());
 
         // Set initial state
         actor.model.config = Some(self.config.clone());
         actor.model.artifact = Some(self.artifact);
-        actor.model.sensor_count = self.sensors.len();
         actor.model.actor_count = self.patch_actor_handles.len();
+
+        // Subscribe to sensor broadcasts BEFORE starting
+        actor.handle().subscribe::<SensorReady>().await;
+        actor.handle().subscribe::<MeasurementResult>().await;
 
         // Configure handlers before starting
         configure_handlers(&mut actor);
 
         let coordinator_handle = actor.start().await;
 
-        // Spawn sensor actors
-        let mut sensor_handles = Vec::new();
-        for sensor in &self.sensors {
-            let sensor_actor =
-                super::SensorActor::new(sensor.clone(), coordinator_handle.clone());
-            let handle = sensor_actor.spawn(runtime).await;
-            sensor_handles.push(handle);
-        }
-
         // Patch actor handles are already spawned - use them directly
         let patch_handles = self.patch_actor_handles;
 
-        // Send handles to coordinator via message
+        // Send patch handles to coordinator via message
         coordinator_handle
-            .send(RegisterActors {
-                sensor_handles,
-                patch_handles,
-            })
+            .send(RegisterActors { patch_handles })
             .await;
 
         coordinator_handle
     }
 }
 
-/// Internal message to register actor handles after spawn.
+/// Internal message to register patch actor handles after spawn.
 #[derive(Debug, Clone)]
 struct RegisterActors {
-    sensor_handles: Vec<ActorHandle>,
     patch_handles: Vec<ActorHandle>,
 }
 
@@ -326,12 +363,27 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
     // Handle actor registration (internal, during spawn)
     actor.mutate_on::<RegisterActors>(|actor, context| {
         let msg = context.message();
-        actor.model.sensor_handles = msg.sensor_handles.clone();
         actor.model.patch_actor_handles = msg.patch_handles.clone();
         trace!(
-            sensors = actor.model.sensor_handles.len(),
             actors = actor.model.patch_actor_handles.len(),
-            "Registered actor handles"
+            "Registered patch actor handles"
+        );
+        Reply::ready()
+    });
+
+    // Handle sensor self-registration via broker
+    actor.mutate_on::<SensorReady>(|actor, context| {
+        let reply_address = context.origin_envelope().reply_to();
+        let sender_ern = reply_address.name();
+
+        actor
+            .model
+            .registered_sensors
+            .insert(sender_ern.to_string());
+        debug!(
+            sensor_ern = %sender_ern,
+            total_sensors = actor.model.registered_sensors.len(),
+            "Sensor registered"
         );
         Reply::ready()
     });
@@ -339,7 +391,10 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
     // Handle RegionActor registration
     actor.mutate_on::<RegisterRegionActors>(|actor, context| {
         let msg = context.message();
-        actor.model.region_actors = msg.actors.clone();
+        actor.model.region_actors.clear();
+        for (region_id, handle) in &msg.actors {
+            actor.model.region_actors.insert(*region_id, handle.clone());
+        }
         trace!(
             regions = actor.model.region_actors.len(),
             "Registered region actors"
@@ -352,7 +407,10 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         let handle = context.message().handle.clone();
         actor.model.patch_actor_handles.push(handle);
         actor.model.actor_count += 1;
-        debug!(total_actors = actor.model.actor_count, "Registered patch actor");
+        debug!(
+            total_actors = actor.model.actor_count,
+            "Registered patch actor"
+        );
         Reply::ready()
     });
 
@@ -382,7 +440,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             return Reply::ready();
         };
 
-        info!(tick = tick_num, regions = actor.model.region_actors.len(), "Tick started");
+        info!(
+            tick = tick_num,
+            regions = actor.model.region_actors.len(),
+            "Tick started"
+        );
 
         // Phase 1: Broadcast ApplyDecay to all RegionActors
         let decay_msg = ApplyDecay {
@@ -391,20 +453,24 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             confidence_half_life_ms: config.decay.confidence_half_life_ms,
         };
 
-        let region_actor_handles: Vec<_> = actor.model.region_actors.values().cloned().collect();
+        let region_actor_handles: Vec<_> = actor
+            .model
+            .region_actors
+            .iter()
+            .map(|e| e.value().clone())
+            .collect();
 
         // Generate correlation ID for measurement phase
         let correlation_id = "tick".create_type_id::<V7>().to_string();
 
-        // Collect regions and sensor handles for async broadcast
+        // Collect regions for broadcast
         let region_data: Vec<_> = artifact
             .region_ids()
             .iter()
             .filter_map(|rid| artifact.read_region(*rid).ok().map(|view| (*rid, view)))
             .collect();
 
-        let sensor_handles = actor.model.sensor_handles.clone();
-        let sensor_count = actor.model.sensor_count;
+        let sensor_count = actor.model.registered_sensors.len();
         let expected_count = sensor_count * region_data.len();
 
         // Track pending measurements
@@ -421,6 +487,9 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             "Starting tick: decay + measurement phase"
         );
 
+        // Get broker for broadcasting
+        let broker = actor.broker().clone();
+
         // Broadcast decay and measurements
         Reply::pending(async move {
             // Broadcast decay to all region actors
@@ -428,7 +497,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                 handle.send(decay_msg.clone()).await;
             }
 
-            // Broadcast MeasureRegion to all sensors
+            // Broadcast MeasureRegion to all sensors via broker
+            // Sensors subscribe to MeasureRegion and respond with MeasurementResult
             for (rid, region_view) in region_data {
                 let msg = MeasureRegion {
                     correlation_id: correlation_id.clone(),
@@ -437,9 +507,7 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                     now_ms,
                 };
 
-                for handle in &sensor_handles {
-                    handle.send(msg.clone()).await;
-                }
+                broker.broadcast(msg).await;
             }
         })
     });
@@ -450,7 +518,7 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         let correlation_id = result.correlation_id.clone();
         let region_id = result.region_id;
 
-        let Some(pending) = actor.model.pending_measurements.get_mut(&correlation_id) else {
+        let Some(mut pending) = actor.model.pending_measurements.get_mut(&correlation_id) else {
             warn!(
                 correlation_id = %correlation_id,
                 "Received measurement for unknown correlation ID"
@@ -462,10 +530,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         pending.results.push(result.clone());
 
         // Route measurement to the target RegionActor
-        if let Some(region_handle) = actor.model.region_actors.get(&region_id).cloned() {
+        if let Some(region_handle) = actor.model.region_actors.get(&region_id) {
+            let handle = region_handle.clone();
             let result_clone = result;
             tokio::spawn(async move {
-                region_handle.send(result_clone).await;
+                handle.send(result_clone).await;
             });
         }
 
@@ -473,8 +542,9 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         if !pending.is_complete() {
             return Reply::ready();
         }
+        drop(pending); // Release the lock before removing
 
-        let pending = actor
+        let (_, pending) = actor
             .model
             .pending_measurements
             .remove(&correlation_id)
@@ -489,7 +559,12 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         // Start pressure query phase
         let query_correlation_id = "query".create_type_id::<V7>().to_string();
-        let region_actor_handles: Vec<_> = actor.model.region_actors.values().cloned().collect();
+        let region_actor_handles: Vec<_> = actor
+            .model
+            .region_actors
+            .iter()
+            .map(|e| e.value().clone())
+            .collect();
         let expected_count = region_actor_handles.len();
 
         actor.model.pending_pressure_queries.insert(
@@ -513,7 +588,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         let response = context.message().clone();
         let correlation_id = response.correlation_id.clone();
 
-        let Some(pending) = actor.model.pending_pressure_queries.get_mut(&correlation_id) else {
+        let Some(mut pending) = actor
+            .model
+            .pending_pressure_queries
+            .get_mut(&correlation_id)
+        else {
             warn!(
                 correlation_id = %correlation_id,
                 "Received pressure response for unknown correlation ID"
@@ -528,8 +607,9 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         if !pending.is_complete() {
             return Reply::ready();
         }
+        drop(pending); // Release the lock before removing
 
-        let pending = actor
+        let (_, pending) = actor
             .model
             .pending_pressure_queries
             .remove(&correlation_id)
@@ -611,7 +691,12 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         // Track pending proposals
         actor.model.pending_proposals.insert(
             proposal_correlation_id.clone(),
-            PendingProposals::new(expected_count, high_pressure_regions.clone(), now_ms, total_pressure),
+            PendingProposals::new(
+                expected_count,
+                high_pressure_regions.clone(),
+                now_ms,
+                total_pressure,
+            ),
         );
 
         trace!(
@@ -659,7 +744,7 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         let proposal = context.message().clone();
         let correlation_id = proposal.correlation_id.clone();
 
-        let Some(pending) = actor.model.pending_proposals.get_mut(&correlation_id) else {
+        let Some(mut pending) = actor.model.pending_proposals.get_mut(&correlation_id) else {
             warn!(
                 correlation_id = %correlation_id,
                 "Received proposal for unknown correlation ID"
@@ -674,8 +759,9 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         if !pending.is_complete() {
             return Reply::ready();
         }
+        drop(pending); // Release the lock before removing
 
-        let pending = actor
+        let (_, pending) = actor
             .model
             .pending_proposals
             .remove(&correlation_id)
@@ -767,7 +853,12 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         let inhibit_ms = config.activation.inhibit_ms;
         let min_improvement = config.selection.min_expected_improvement;
-        let region_actors = actor.model.region_actors.clone();
+        let region_actors: HashMap<RegionId, ActorHandle> = actor
+            .model
+            .region_actors
+            .iter()
+            .map(|e| (*e.key(), e.value().clone()))
+            .collect();
         let current_tick = actor.model.current_tick;
 
         trace!(
@@ -800,7 +891,7 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         let result = context.message().clone();
         let correlation_id = result.correlation_id.clone();
 
-        let Some(pending) = actor.model.pending_patches.get_mut(&correlation_id) else {
+        let Some(mut pending) = actor.model.pending_patches.get_mut(&correlation_id) else {
             warn!(
                 correlation_id = %correlation_id,
                 "Received patch result for unknown correlation ID"
@@ -810,6 +901,10 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         // Store result
         pending.results.push(result.clone());
+
+        // Check if all results received (check before dropping lock)
+        let is_complete = pending.is_complete();
+        drop(pending); // Release the lock before potentially modifying artifact
 
         // If patch was successful, update the artifact
         if result.success
@@ -834,11 +929,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
         }
 
         // Check if all results received
-        if !pending.is_complete() {
+        if !is_complete {
             return Reply::ready();
         }
 
-        let pending = actor.model.pending_patches.remove(&correlation_id).unwrap();
+        let (_, pending) = actor.model.pending_patches.remove(&correlation_id).unwrap();
 
         // Compile tick result
         let applied: Vec<_> = pending
@@ -847,9 +942,7 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             .filter(|r| r.success)
             .map(|r| Patch {
                 region: r.region_id,
-                op: crate::region::PatchOp::Replace(
-                    r.new_content.clone().unwrap_or_default(),
-                ),
+                op: crate::region::PatchOp::Replace(r.new_content.clone().unwrap_or_default()),
                 rationale: format!("δ={:.3}", r.pressure_delta),
                 expected_delta: HashMap::new(),
             })
@@ -897,7 +990,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         info!(
             tick = actor.model.current_tick,
-            pressure = format!("{:.2} -> {:.2}", previous_tick_pressure.unwrap_or(new_pressure), new_pressure),
+            pressure = format!(
+                "{:.2} -> {:.2}",
+                previous_tick_pressure.unwrap_or(new_pressure),
+                new_pressure
+            ),
             velocity = format!("{:.3}", velocity),
             acceleration = format!("{:.3}", acceleration),
             applied = applied.len(),
@@ -908,7 +1005,11 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         if let Some(tick_driver) = actor.model.tick_driver.clone() {
             return Reply::pending(async move {
-                tick_driver.send(TickComplete { result: tick_result }).await;
+                tick_driver
+                    .send(TickComplete {
+                        result: tick_result,
+                    })
+                    .await;
             });
         }
 
@@ -955,7 +1056,12 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
     // Handle ValidatePatch - write artifact with proposed patch for validation
     actor.act_on::<ValidatePatch>(|actor, context| {
         let msg = context.message().clone();
-        let region_actors = actor.model.region_actors.clone();
+        let region_actors: HashMap<RegionId, ActorHandle> = actor
+            .model
+            .region_actors
+            .iter()
+            .map(|e| (*e.key(), e.value().clone()))
+            .collect();
 
         let Some(output_dir) = actor.model.output_dir.clone() else {
             warn!("ValidatePatch: output_dir not set");
@@ -1008,10 +1114,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
         // Write patched artifact
         let region_short = format!("{:.8}", msg.region_id);
-        let artifact_path = output_dir.join(format!(
-            "tick_{}_region_{}.rs",
-            msg.tick, region_short
-        ));
+        let artifact_path =
+            output_dir.join(format!("tick_{}_region_{}.rs", msg.tick, region_short));
 
         if let Err(e) = std::fs::write(&artifact_path, &patched_source) {
             warn!(path = %artifact_path.display(), error = %e, "Failed to write patched artifact");

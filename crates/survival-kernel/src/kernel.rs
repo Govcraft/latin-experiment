@@ -70,9 +70,13 @@ pub fn half_life_decay(value: &mut f64, dt_ms: u64, half_life_ms: u64) {
 /// - Natural conflict resolution via mailbox serialization
 /// - Post-patch validation to ensure pressure reduction (δ_min > 0)
 /// - Local state ownership (stigmergy model from paper)
+///
+/// Sensors are spawned separately and self-register via broker broadcast.
 pub struct AsyncKernelBuilder {
     coordinator: KernelCoordinator,
-    /// Validation sensor for RegionActors
+    /// Sensors to spawn (they self-register via SensorReady broadcast)
+    sensors: Vec<Arc<dyn Sensor>>,
+    /// Validation sensor for RegionActors (first sensor added)
     validation_sensor: Option<Arc<dyn Sensor>>,
 }
 
@@ -81,6 +85,7 @@ impl AsyncKernelBuilder {
     pub fn new(config: KernelConfig, artifact: Box<dyn Artifact>) -> Self {
         Self {
             coordinator: KernelCoordinator::new(config, artifact),
+            sensors: Vec::new(),
             validation_sensor: None,
         }
     }
@@ -89,13 +94,16 @@ impl AsyncKernelBuilder {
     ///
     /// The first sensor added is also used for post-patch validation
     /// in RegionActors to ensure patches reduce pressure.
+    ///
+    /// Sensors are spawned during `spawn()` and self-register with the
+    /// coordinator via `SensorReady` broker broadcast.
     pub fn add_sensor(mut self, sensor: Box<dyn Sensor>) -> Self {
         let sensor_arc: Arc<dyn Sensor> = Arc::from(sensor);
         // First sensor is used for validation
         if self.validation_sensor.is_none() {
             self.validation_sensor = Some(sensor_arc.clone());
         }
-        self.coordinator.add_sensor(sensor_arc);
+        self.sensors.push(sensor_arc);
         self
     }
 
@@ -114,7 +122,11 @@ impl AsyncKernelBuilder {
     /// Returns the coordinator's actor handle. To run ticks:
     /// 1. Send `Tick { now_ms }` messages to the coordinator
     /// 2. Receive `TickComplete { result }` replies
+    ///
+    /// Sensors are spawned and self-register via `SensorReady` broker broadcast.
     pub async fn spawn(self, runtime: &mut ActorRuntime) -> ActorHandle {
+        use crate::actors::SensorActor;
+
         // Get artifact info before moving to coordinator
         let region_ids: Vec<RegionId> = self.coordinator.artifact.region_ids();
         let region_views: Vec<_> = region_ids
@@ -124,8 +136,14 @@ impl AsyncKernelBuilder {
         let pressure_axes = self.coordinator.config.pressure_axes.clone();
         let validation_sensor = self.validation_sensor.clone();
 
-        // Spawn the coordinator first
+        // Spawn the coordinator first (it subscribes to SensorReady)
         let coordinator_handle = self.coordinator.spawn(runtime).await;
+
+        // Spawn sensor actors - they self-register via SensorReady broadcast
+        for sensor in self.sensors {
+            let sensor_actor = SensorActor::new(sensor);
+            sensor_actor.spawn(runtime).await;
+        }
 
         // Spawn RegionActors if we have a validation sensor
         if let Some(sensor) = validation_sensor {

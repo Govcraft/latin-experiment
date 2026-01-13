@@ -8,7 +8,14 @@ use std::collections::HashMap;
 use crate::pressure::{PressureVector, Signals};
 use crate::region::{Patch, RegionId, RegionState, RegionView};
 
-/// Request to measure signals for a region - sent to SensorActors.
+/// Notification that a sensor is ready - broadcast by SensorActors on start.
+///
+/// The coordinator gets the sensor's ERN from the message envelope.
+/// No fields needed - the actor name contains the sensor identity.
+#[derive(Debug, Clone)]
+pub struct SensorReady;
+
+/// Request to measure signals for a region - broadcast to SensorActors.
 #[derive(Debug, Clone)]
 pub struct MeasureRegion {
     /// Correlation ID for this tick's measurements
