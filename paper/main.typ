@@ -13,7 +13,7 @@
   abstract: [
     Current multi-agent LLM frameworks rely on explicit orchestration patterns borrowed from human organizational structures: planners delegate to executors, managers coordinate workers, and hierarchical control flow governs agent interactions. These approaches suffer from coordination overhead that scales poorly with agent count and task complexity. We propose a fundamentally different paradigm inspired by natural coordination mechanisms: agents operate locally on a shared artifact, guided only by pressure gradients derived from measurable quality signals, with temporal decay preventing premature convergence. We formalize this as optimization over a pressure landscape and prove convergence guarantees under mild conditions.
 
-    Empirically, on Latin Square constraint satisfaction across 1,078 trials, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$, indicating statistical equivalence). Both significantly outperform sequential (23.3%), random (11.7%), and conversation-based multi-agent dialogue (8.6%, $p < 10^{-5}$). Temporal decay is essential: disabling it increases final pressure 49-fold ($d = 4.15$). On easy problems, pressure-field achieves 87% solve rate. The approach maintains consistent performance from 2 to 32 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control while dramatically outperforming explicit dialogue-based coordination. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
+    Empirically, on Latin Square constraint satisfaction across 1,078 trials, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$, indicating statistical equivalence). Both significantly outperform sequential (23.3%), random (11.7%), and conversation-based multi-agent dialogue (8.6%, $p < 10^{-5}$). Temporal decay is essential: disabling it increases final pressure 49-fold ($d = 4.15$). On easy problems, pressure-field achieves 87% solve rate. The approach maintains consistent performance from 2 to 32 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control while dramatically outperforming explicit dialogue-based coordination. Foundation models enable this approach: their broad pretraining and zero-shot reasoning allow quality-improving patches from local pressure signals alone, without domain-specific coordination protocols. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
   ],
   keywords: (
     "multi-agent systems",
@@ -33,7 +33,7 @@ Our approach draws inspiration from natural coordination mechanisms—ant coloni
 
 Our contributions:
 
-+ We formalize *pressure-field coordination*: agents observe local quality signals, compute pressure gradients, and take locally-greedy actions. Coordination emerges from shared artifact state, not explicit communication.
++ We formalize *pressure-field coordination* as a role-free, stigmergic alternative to organizational MAS paradigms. Unlike GPGP's hierarchical message-passing or SharedPlans' intention alignment, pressure-field achieves $O(1)$ coordination overhead through shared artifact state. Foundation models enable this approach: their broad pretraining allows quality-improving patches from local pressure signals without domain-specific coordination protocols.
 
 + We introduce *temporal decay* as a mechanism for preventing premature convergence. Disabling decay increases final pressure 49-fold (Cohen's $d = 4.15$), trapping agents in local minima.
 
@@ -43,7 +43,43 @@ Our contributions:
 
 = Related Work
 
-Our approach bridges three research streams: multi-agent LLM frameworks provide the application domain but rely on explicit coordination we eliminate; swarm intelligence and stigmergy inspire our pressure-field mechanism but lack formal guarantees; decentralized optimization provides theoretical foundations we adapt to LLM-based artifact refinement. We survey each and position our contribution.
+Our approach bridges four research traditions: multi-agent systems coordination theory provides the conceptual foundation; swarm intelligence provides the stigmergic mechanism; LLM systems provide the application domain; and decentralized optimization provides theoretical guarantees. We survey each and position pressure-field coordination within this landscape.
+
+== MAS Coordination Theory
+
+Pressure-field coordination occupies a unique position in the MAS landscape: it eliminates roles (unlike organizational paradigms), messages (unlike GPGP), and intention reasoning (unlike SharedPlans) while providing formal convergence guarantees (unlike purely reactive systems). This section positions our contribution within four established coordination frameworks, showing how artifact refinement with measurable quality signals enables this architectural simplification. The key insight: for this domain class, coordination complexity collapses from quadratic message-passing to constant-time state-sharing.
+
+=== Organizational Paradigms and Dependency Management
+
+Pressure-field coordination achieves role-free coordination: any agent can address any high-pressure region without negotiating access rights or awaiting task assignment. This contrasts sharply with traditional organizational paradigms. Horling and Lesser @horling2004survey surveyed nine such paradigms---from rigid hierarchies to flexible markets---finding that all assign explicit roles constraining agent behavior. While role assignment reduces coordination complexity by pre-structuring interactions, it introduces brittleness: role changes require protocol modifications, and role failure can cascade through the system.
+
+Our approach instantiates Malone and Crowston's @malone1994coordination coordination framework with a critical difference: the artifact itself is the shared resource, and pressure gradients serve as dependency signals. Rather than assigning roles to manage resource access, agents share read access to the entire artifact and propose changes to high-pressure regions. Coordination emerges from pressure alignment---agents reduce local pressure, which reduces global pressure through the artifact's shared state.
+
+=== Distributed Problem Solving and Communication Overhead
+
+Pressure-field coordination achieves $O(1)$ inter-agent communication overhead---agents exchange no messages. Coordination occurs entirely through shared artifact reads and writes, eliminating the message-passing bottleneck. This contrasts with the GPGP framework @decker1995gpgp, which reduces communication from $O(n^2)$ pairwise negotiation to $O(n log n)$ hierarchical aggregation through summary information exchange. While GPGP represents significant progress, its explicit messages---task announcements, commitment exchanges, schedule updates---still introduce latency and failure points at scale.
+
+The approaches target different domains. Pressure-field coordination specializes in artifact refinement tasks where quality decomposes into measurable regional signals---a class including code quality improvement, document editing, and configuration management. GPGP generalizes to complex task networks with precedence constraints. For artifact refinement, however, pressure-field's stigmergic coordination eliminates message-passing overhead entirely.
+
+=== Shared Intentions and Alignment Costs
+
+Pressure-field coordination eliminates intention alignment through pressure alignment. Rather than reasoning about what other agents believe or intend, agents observe artifact state and pressure gradients. When agents greedily reduce local pressure under separable or bounded-coupling conditions, global pressure decreases. This is coordination without communication about intentions---agents align through shared objective functions, not mutual beliefs.
+
+This contrasts with the SharedPlans framework @grosz1996sharedplans, which formalizes joint activity through shared mental attitudes: mutual beliefs about goals, commitments, and action sequences. The framework elegantly captures human-like collaboration but requires significant cognitive machinery---intention recognition, commitment protocols, belief revision---all computationally expensive operations that scale poorly with agent count.
+
+Our experiments validate this analysis: AutoGen-style conversation coordination---which implements intention alignment through explicit dialogue---achieves only 8.6% solve rate, significantly worse than pressure-field's 38.2% (Section 6.2). The coordination overhead of belief negotiation exceeds its organizational benefit for constraint satisfaction tasks. The trade-off is transparency: SharedPlans supports dialogue about why agents act; pressure-field agents react to gradients without explaining reasoning.
+
+=== Self-Organization and Emergent Coordination
+
+Pressure-field coordination satisfies De Wolf and Holvoet's @dewolf2005engineering self-organization criteria: absence of external control, local interactions producing global patterns, and dynamic adaptation. They explicitly cite "gradient fields" as a self-organization design pattern---our approach instantiates this pattern with formal guarantees.
+
+No external controller exists---agents observe and act autonomously based on local pressure signals. Coordination emerges from local decisions: agents reduce regional pressure through greedy actions, and global coordination arises from shared artifact state. Temporal decay provides dynamic adaptation---fitness erodes continuously, preventing premature convergence and enabling continued refinement.
+
+The theoretical contribution formalizes this intuition through potential game theory. Theorem 1 establishes convergence guarantees for aligned pressure systems; Theorem 2 shows decay enables escape from suboptimal basins. This bridges descriptive design patterns and prescriptive theoretical frameworks.
+
+=== Foundation Model Enablement
+
+Foundation models enable stigmergic coordination through three capabilities: (1) broad pretraining allows patch proposals across diverse artifact types without domain-specific fine-tuning; (2) instruction-following allows operation from pressure signals alone, without complex action representations; (3) zero-shot reasoning interprets constraint violations without explicit protocol training. These properties make FMs suitable for stigmergic coordination---they require only local context and quality signals to generate productive actions, matching pressure-field's locality constraints.
 
 == Multi-Agent LLM Systems
 
@@ -51,9 +87,11 @@ Recent work has explored multi-agent architectures for LLM-based task solving. A
 
 These frameworks share a common design pattern: explicit orchestration through message passing, role assignment, and hierarchical task decomposition. While effective for structured workflows, this approach faces scaling limitations. Central coordinators become bottlenecks, message-passing overhead grows with agent count, and failures in manager agents cascade to dependents. Our work takes a fundamentally different approach: coordination emerges from shared state rather than explicit communication.
 
+Foundation models enable pressure-field coordination through capabilities that prior agent architectures lacked. Their broad pretraining allows reasonable patches across diverse artifact types---code, text, configurations---without domain-specific fine-tuning. Their instruction-following capabilities allow operation from pressure signals and quality feedback alone. Their zero-shot reasoning interprets constraint violations and proposes repairs without explicit protocol training. These properties make foundation models particularly suitable for stigmergic coordination: they require only local context and quality signals to generate productive actions, matching the locality constraints of pressure-field systems.
+
 == Swarm Intelligence and Stigmergy
 
-The concept of stigmergy—indirect coordination through environment modification—was introduced by Grassé @grasse1959stigmergie to explain termite nest-building behavior. Termites deposit pheromone-infused material that attracts further deposits, leading to emergent construction without central planning. This principle has proven remarkably powerful: complex structures arise from simple local rules without any agent having global knowledge.
+The concept of stigmergy---indirect coordination through environment modification---was introduced by Grassé @grasse1959stigmergie to explain termite nest-building behavior. Termites deposit pheromone-infused material that attracts further deposits, leading to emergent construction without central planning. This directly instantiates Malone and Crowston's @malone1994coordination shared resource coordination: pheromone trails encode dependency information about solution quality. This principle has proven remarkably powerful: complex structures arise from simple local rules without any agent having global knowledge.
 
 Dorigo and colleagues @dorigo1996ant @dorigo1997acs formalized this insight into Ant Colony Optimization (ACO), where artificial pheromone trails guide search through solution spaces. Key mechanisms include positive feedback (reinforcing good paths), negative feedback (pheromone evaporation), and purely local decision-making. ACO has achieved strong results on combinatorial optimization problems including TSP, vehicle routing, and scheduling.
 
@@ -508,6 +546,7 @@ Our results suggest the following guidance:
 1. *Simplicity is valued.* No coordinator agent needed; coordination emerges from shared state.
 2. *Fault tolerance matters.* No single point of failure; agents can join/leave without protocol overhead.
 3. *Pressure signals are available.* The domain provides measurable quality gradients.
+4. *Foundation model suitability.* FMs' zero-shot reasoning and broad pretraining make them particularly effective in stigmergic coordination. Unlike specialized agents requiring explicit action representations and communication protocols, FMs interpret pressure signals, reason about local quality constraints, and propose patches across diverse artifact types from simple instructions.
 
 *Hierarchical coordination is equivalent when:*
 1. *Explicit control is needed.* Some domains require deterministic task assignment.
@@ -530,6 +569,38 @@ The escalation mechanism works because larger models have broader solution cover
 - *Larger-scale experiments*: Testing on $8 times 8$ and $9 times 9$ grids to characterize the difficulty ceiling
 - *Alternative domains*: Applying pressure-field coordination to code refactoring, configuration management, and other artifact refinement tasks
 
+== Societal Implications
+
+Pressure-field coordination raises societal concerns that extend beyond technical performance. We identify three critical issues---accountability attribution, metric gaming through Goodhart's Law, and explainability challenges---that require deliberate design choices in deployment.
+
+=== Accountability and Attribution
+
+When coordination emerges from shared pressure gradients rather than explicit delegation, attributing outcomes to individual agents becomes challenging. In hierarchical systems, task assignment creates clear accountability chains. In pressure-field coordination, multiple agents may contribute to a region through independent pressure-reducing actions, with no record of which agent "owned" the outcome.
+
+This accountability diffusion has both benefits and risks. The benefit is fault tolerance: agent failures degrade performance gracefully rather than catastrophically. The risk is opacity in failure analysis: identifying which agent proposed a problematic patch---and what pressure signal motivated it---requires detailed logging that the minimal coordination mechanism does not inherently provide.
+
+For deployment in regulated domains, this suggests an augmentation requirement: pressure-field systems must maintain audit logs recording patch provenance, pressure signals at proposal time, and validation outcomes. The coordination mechanism remains simple---agents coordinate through shared state---but operational deployment adds logging infrastructure preserving accountability.
+
+=== Goodhart's Law and Metric Gaming
+
+Goodhart's Law states: "When a measure becomes a target, it ceases to be a good measure." Pressure-field coordination is vulnerable to this dynamic because agents are optimized to reduce pressure as defined by designer-specified functions. If those functions imperfectly capture true quality---and they inevitably do---agents will discover and exploit the mismatch.
+
+Consider code quality pressure functions penalizing complexity metrics. An agent might reduce complexity by splitting functions excessively, harming readability while improving the metric. The mitigation is not abandoning pressure functions but designing them defensively: use multiple orthogonal pressure axes, include adversarial sensors detecting gaming strategies, and audit whether pressure reduction correlates with human quality judgments. Pressure functions should evolve as agents discover exploits.
+
+Foundation models introduce second-order gaming concerns: LLMs trained on internet-scale text may have implicit knowledge of how to game specific benchmarks. This suggests pressure functions for LLM-based systems should favor domain-specific quality signals harder to optimize without genuine improvement.
+
+=== Explainability Challenges
+
+In hierarchical systems, explanations follow delegation chains: "Manager X assigned task Y to Worker Z because condition C held." In pressure-field coordination, the explanation is: "Region R had high pressure, agent A proposed patch Δ reducing pressure by δ." This is mechanistically transparent but causally opaque---it describes what happened without explaining why that particular patch was chosen.
+
+This is the explainability trade-off inherent to emergent coordination: simplicity in mechanism comes at the cost of legibility in rationale. For many domains---code formatting, resource optimization, routine maintenance---the trade-off is acceptable: outcomes are verifiable even if reasoning is opaque. For high-stakes domains requiring human oversight, opacity is unacceptable.
+
+The design implication is domain-dependent deployment: pressure-field coordination suits domains where outcome verification is cheap even if reasoning transparency is limited. For domains requiring justification to human stakeholders, hierarchical coordination remains necessary despite overhead costs.
+
+=== Design Implications
+
+These concerns suggest three requirements for responsible deployment: comprehensive audit logging preserving patch provenance and pressure signals, defensive pressure function design with multiple orthogonal axes, and domain-appropriate verification matching coordination opacity with outcome verifiability. The coordination mechanism remains simple---but responsible deployment requires surrounding infrastructure addressing accountability, gaming, and explainability.
+
 = Conclusion
 
 We presented pressure-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
@@ -545,6 +616,8 @@ Our theoretical analysis establishes convergence guarantees under pressure align
 4. *Temporal decay is essential*. Disabling it increases final pressure 49-fold (Cohen's $d = 4.15$), trapping agents in local minima.
 
 The key contribution is not that pressure-field outperforms hierarchical---it does not. Rather, pressure-field achieves *equivalent performance with simpler architecture*: no coordinator agent, no explicit message passing, just shared state and local pressure gradients. Meanwhile, the popular paradigm of multi-agent dialogue coordination proves counterproductive for constraint satisfaction.
+
+Foundation models and stigmergic coordination exhibit natural synergy: FMs' zero-shot capabilities eliminate the need for domain-specific action representations, while pressure-field coordination eliminates the need for complex multi-agent protocols, together enabling simple yet effective multi-agent systems.
 
 These results suggest that for domains with measurable quality signals, implicit coordination through shared state offers a simpler, equally effective alternative to explicit hierarchical control---and a strictly superior alternative to dialogue-based coordination.
 
