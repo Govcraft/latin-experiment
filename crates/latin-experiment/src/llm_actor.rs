@@ -111,7 +111,7 @@ impl Default for LlmActorConfig {
             host: "http://localhost:8000".to_string(),
             model: "Qwen/Qwen2.5-1.5B".to_string(),
             sampling: SamplingConfig::balanced(),
-            max_tokens: 256,
+            max_tokens: 32,
             band: SamplingBand::Balanced,
             randomize_sampling: true,
         }

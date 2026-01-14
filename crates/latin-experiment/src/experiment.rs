@@ -905,7 +905,7 @@ What number goes in position {target_pos}? Return just the number."#,
                 host: initial_host.clone(),
                 model: initial_model.clone(),
                 sampling: SamplingConfig::random_in_band(band),
-                max_tokens: 256,
+                max_tokens: 32,
                 band,
                 randomize_sampling: true,
             };
