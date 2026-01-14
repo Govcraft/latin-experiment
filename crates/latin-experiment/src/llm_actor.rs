@@ -243,15 +243,17 @@ fn configure_llm_actor(actor: &mut ManagedActor<Idle, LlmActorState>) {
             let result = generate_patch(&config, &msg, &examples).await;
             // Permit is dropped here, releasing the slot
 
-            let patches = match result {
-                Ok(Some(patch)) => vec![(1.0, patch)],
-                Ok(None) => {
+            let (patches, prompt_tokens, completion_tokens) = match result {
+                Ok((Some(patch), prompt_t, completion_t)) => {
+                    (vec![(1.0, patch)], prompt_t, completion_t)
+                }
+                Ok((None, prompt_t, completion_t)) => {
                     debug!(region_id = %msg.region_id, "No patch generated");
-                    vec![]
+                    (vec![], prompt_t, completion_t)
                 }
                 Err(e) => {
                     warn!(region_id = %msg.region_id, error = %e, "Failed to generate patch");
-                    vec![]
+                    (vec![], 0, 0)
                 }
             };
 
@@ -259,6 +261,8 @@ fn configure_llm_actor(actor: &mut ManagedActor<Idle, LlmActorState>) {
                 correlation_id: msg.correlation_id,
                 actor_name: name,
                 patches,
+                prompt_tokens,
+                completion_tokens,
             };
 
             // Broadcast result (coordinator subscribes to PatchProposal)
@@ -268,11 +272,13 @@ fn configure_llm_actor(actor: &mut ManagedActor<Idle, LlmActorState>) {
 }
 
 /// Generate a patch for the given region using the LLM.
+///
+/// Returns (Option<Patch>, prompt_tokens, completion_tokens).
 async fn generate_patch(
     config: &LlmActorConfig,
     msg: &ProposeForRegion,
     examples: &[crate::example_bank::Example],
-) -> Result<Option<Patch>> {
+) -> Result<(Option<Patch>, u32, u32)> {
     let n = msg
         .region_view
         .metadata
@@ -354,11 +360,11 @@ Return ONLY the complete row as space-separated numbers. Example: "1 2 3 4 5 6""
         config.sampling.clone()
     };
 
-    // Call vLLM
+    // Call vLLM with usage tracking
     let client = VllmClient::new(&config.host);
 
-    let response_text = client
-        .generate(
+    let response = client
+        .generate_with_usage(
             &config.model,
             &prompt,
             sampling.temperature,
@@ -366,30 +372,37 @@ Return ONLY the complete row as space-separated numbers. Example: "1 2 3 4 5 6""
             config.max_tokens,
         )
         .await?;
-    let response_text = response_text.trim();
 
-    debug!(response = %response_text, "LLM response");
+    let prompt_tokens = response.prompt_tokens;
+    let completion_tokens = response.completion_tokens;
+    let response_text = response.content.trim();
+
+    debug!(response = %response_text, prompt_tokens, completion_tokens, "LLM response");
 
     // Parse the response - should be space-separated numbers
     let new_content = parse_row_response(response_text, n);
 
     let Some(new_content) = new_content else {
         debug!("Could not parse valid row from LLM response");
-        return Ok(None);
+        return Ok((None, prompt_tokens, completion_tokens));
     };
 
     // Don't return if content is unchanged
     if new_content == msg.region_view.content {
         debug!("LLM returned unchanged content");
-        return Ok(None);
+        return Ok((None, prompt_tokens, completion_tokens));
     }
 
-    Ok(Some(Patch {
-        region: msg.region_id,
-        op: PatchOp::Replace(new_content),
-        rationale: "Filled empty cells in row".to_string(),
-        expected_delta: HashMap::new(),
-    }))
+    Ok((
+        Some(Patch {
+            region: msg.region_id,
+            op: PatchOp::Replace(new_content),
+            rationale: "Filled empty cells in row".to_string(),
+            expected_delta: HashMap::new(),
+        }),
+        prompt_tokens,
+        completion_tokens,
+    ))
 }
 
 /// Parse a row response from the LLM.

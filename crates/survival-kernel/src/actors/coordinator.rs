@@ -146,6 +146,10 @@ struct PendingPatches {
     evaluated_count: usize,
     /// Count of skipped regions
     skipped_count: usize,
+    /// Total prompt tokens from LLM actors this tick
+    prompt_tokens: u32,
+    /// Total completion tokens from LLM actors this tick
+    completion_tokens: u32,
 }
 
 impl PendingPatches {
@@ -613,6 +617,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                 total_pressure,
                 velocity,
                 acceleration,
+                prompt_tokens: 0,
+                completion_tokens: 0,
             };
 
             actor.model.stable_ticks += 1;
@@ -729,6 +735,12 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             return Reply::ready();
         };
 
+        // Aggregate token counts before consuming proposals
+        let (prompt_tokens, completion_tokens) = pending.proposals.iter().fold(
+            (0u32, 0u32),
+            |(pt, ct), p| (pt + p.prompt_tokens, ct + p.completion_tokens),
+        );
+
         // Group patches by region and select best patch for each eligible region
         let all_patches: Vec<(f64, Patch)> = pending
             .proposals
@@ -775,6 +787,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                 total_pressure,
                 velocity,
                 acceleration,
+                prompt_tokens,
+                completion_tokens,
             };
 
             actor.model.stable_ticks += 1;
@@ -785,6 +799,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                 velocity = format!("{:.3}", velocity),
                 acceleration = format!("{:.3}", acceleration),
                 applied = 0,
+                prompt_tokens,
+                completion_tokens,
                 "Tick complete - stable (no patches proposed)"
             );
 
@@ -809,6 +825,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
                 last_total_pressure: pending.total_pressure,
                 evaluated_count: actor.model.region_actors.len(),
                 skipped_count: 0,
+                prompt_tokens,
+                completion_tokens,
             },
         );
 
@@ -947,6 +965,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             total_pressure: new_pressure,
             velocity,
             acceleration,
+            prompt_tokens: pending.prompt_tokens,
+            completion_tokens: pending.completion_tokens,
         };
 
         info!(
@@ -961,6 +981,8 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             applied = applied.len(),
             rejected = rejected_count,
             delta = format!("-{:.2}", total_delta),
+            prompt_tokens = pending.prompt_tokens,
+            completion_tokens = pending.completion_tokens,
             "Tick complete"
         );
 

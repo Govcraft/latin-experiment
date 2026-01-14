@@ -73,6 +73,10 @@ pub struct PatchProposal {
     pub actor_name: String,
     /// Proposed patches with scores (higher = better)
     pub patches: Vec<(f64, Patch)>,
+    /// Prompt tokens used for this proposal (for metrics tracking)
+    pub prompt_tokens: u32,
+    /// Completion tokens used for this proposal (for metrics tracking)
+    pub completion_tokens: u32,
 }
 
 /// Tick trigger - sent to KernelCoordinator to start a tick cycle.

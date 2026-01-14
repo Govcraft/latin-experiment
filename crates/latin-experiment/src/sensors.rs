@@ -26,6 +26,7 @@ pub type SharedGrid = Arc<RwLock<Vec<Vec<Option<u8>>>>>;
 /// - `empty_count`: Cells that need to be filled (lower is better)
 /// - `row_duplicates`: Duplicate values in the row (0 is valid)
 /// - `col_conflicts`: Values that conflict with other rows (0 is valid)
+#[derive(Clone)]
 pub struct LatinSquareSensor {
     /// Grid size (n x n)
     n: usize,

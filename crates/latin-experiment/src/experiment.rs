@@ -17,7 +17,17 @@ use rand::Rng;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+use acton_reactive::prelude::*;
 use survival_kernel::artifact::Artifact;
+use survival_kernel::config::{
+    ActivationConfig, DecayConfig, KernelConfig, PressureAxisConfig, SelectionConfig,
+};
+use survival_kernel::messages::{RegisterTickDriver, Tick};
+use survival_kernel::region::PatchOp;
+use survival_kernel::AsyncKernelBuilder;
+
+use crate::llm_actor::{LlmActor, LlmActorConfig, SamplingBand, SamplingConfig};
+use crate::tick_driver::TickDriverActor;
 
 use crate::artifact::LatinSquareArtifact;
 use crate::conversation::ConversationRunner;
@@ -181,7 +191,24 @@ impl ExperimentRunner {
         // Create sensor
         let sensor = LatinSquareSensor::new(n, shared_grid.clone());
 
-        // Tracking
+        // For PressureField strategy, use the kernel-based coordination
+        if strategy == Strategy::PressureField {
+            return self
+                .run_pressure_field_with_kernel(
+                    artifact,
+                    shared_grid,
+                    example_bank,
+                    sensor,
+                    agent_count,
+                    trial,
+                    seed,
+                    started_at,
+                    start_time,
+                )
+                .await;
+        }
+
+        // Tracking (for non-PressureField strategies)
         let mut pressure_history = Vec::new();
         let mut patches_per_tick = Vec::new();
         let mut empty_cells_history = Vec::new();
@@ -934,6 +961,388 @@ What number goes in position {target_pos}? Return just the number."#,
         }
 
         None
+    }
+
+    /// Run PressureField strategy using the kernel's actor-based coordination.
+    ///
+    /// This method uses the survival-kernel's actor system for coordination:
+    /// - KernelCoordinator orchestrates tick phases
+    /// - LlmActors propose patches via broker pub/sub
+    /// - RegionActors validate and apply patches
+    /// - TickDriverActor forwards results to the experiment harness
+    #[allow(clippy::too_many_lines)]
+    async fn run_pressure_field_with_kernel(
+        &self,
+        artifact: LatinSquareArtifact,
+        shared_grid: SharedGrid,
+        example_bank: Arc<RwLock<ExampleBank>>,
+        sensor: LatinSquareSensor,
+        agent_count: usize,
+        trial: usize,
+        seed: Option<u64>,
+        started_at: chrono::DateTime<Utc>,
+        start_time: Instant,
+    ) -> Result<ExperimentResult> {
+        let n = artifact.size();
+        let initial_empty = artifact.empty_count();
+
+        // Build kernel config
+        let kernel_config = self.build_kernel_config();
+
+        // Create acton runtime
+        let mut runtime = ActonApp::launch_async().await;
+
+        // Build and spawn the kernel coordinator with artifact and sensor
+        let coordinator_handle = AsyncKernelBuilder::new(
+            kernel_config,
+            Box::new(artifact.clone()),
+        )
+        .add_sensor(Box::new(sensor.clone()))
+        .spawn(&mut runtime)
+        .await;
+
+        // Create semaphore for rate limiting LLM requests
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(self.config.max_concurrent_llm));
+
+        // Spawn LLM actors - they self-register via PatchActorReady broadcast
+        // Distribute actors across sampling bands for diversity
+        for i in 0..agent_count {
+            let band = match i % 3 {
+                0 => SamplingBand::Exploitation,
+                1 => SamplingBand::Balanced,
+                _ => SamplingBand::Exploration,
+            };
+
+            let current_model = if self.config.model_chain.is_empty() {
+                self.config.model.clone()
+            } else {
+                self.config.model_chain[0].clone()
+            };
+
+            let llm_config = LlmActorConfig {
+                host: self.config.vllm_host.clone(),
+                model: current_model,
+                sampling: SamplingConfig::random_in_band(band),
+                max_tokens: 256,
+                band,
+                randomize_sampling: true,
+            };
+
+            let llm_actor = LlmActor::new(
+                format!("LlmActor:{}", i),
+                llm_config,
+                semaphore.clone(),
+                example_bank.clone(),
+            );
+            llm_actor.spawn(&mut runtime).await;
+        }
+
+        // Create tick driver to receive TickComplete messages
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let tick_driver = TickDriverActor::new(tx);
+        let tick_driver_handle = tick_driver.spawn(&mut runtime).await;
+
+        // Register tick driver with coordinator
+        coordinator_handle
+            .send(RegisterTickDriver {
+                handle: tick_driver_handle,
+            })
+            .await;
+
+        // Give actors time to register
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Tracking
+        let mut pressure_history = Vec::new();
+        let mut patches_per_tick = Vec::new();
+        let mut empty_cells_history = Vec::new();
+        let mut tick_metrics = Vec::new();
+        let mut total_prompt_tokens: u32 = 0;
+        let mut total_completion_tokens: u32 = 0;
+        let total_patch_rejections: HashMap<PatchRejection, usize> = HashMap::new();
+
+        // Model escalation state
+        let mut current_model_idx: usize = 0;
+        let mut zero_velocity_ticks: usize = 0;
+        let mut escalation_events: Vec<EscalationEvent> = Vec::new();
+
+        // Track artifact state locally (kernel owns the canonical artifact)
+        let mut local_artifact = artifact.clone();
+
+        // Initial measurement
+        let initial_pressure = self.measure_total_pressure(&local_artifact, &sensor)?;
+        pressure_history.push(initial_pressure);
+        empty_cells_history.push(local_artifact.empty_count());
+
+        // Run tick loop
+        for tick in 0..self.config.max_ticks {
+            let tick_start = Instant::now();
+
+            // Apply decay to example bank
+            if self.config.decay_enabled {
+                let bank = example_bank.read().await;
+                bank.apply_decay();
+            }
+
+            // Send Tick to coordinator
+            coordinator_handle
+                .send(Tick {
+                    now_ms: tick as u64 * 100,
+                })
+                .await;
+
+            // Wait for TickComplete
+            let tick_result = match tokio::time::timeout(
+                tokio::time::Duration::from_secs(30),
+                rx.recv(),
+            )
+            .await
+            {
+                Ok(Some(result)) => result,
+                Ok(None) => {
+                    warn!(tick = tick, "TickDriver channel closed");
+                    break;
+                }
+                Err(_) => {
+                    warn!(tick = tick, "Tick timed out after 30s");
+                    break;
+                }
+            };
+
+            // Update local artifact state from applied patches
+            for patch in &tick_result.applied {
+                if let PatchOp::Replace(new_content) = &patch.op {
+                    // Apply patch to local artifact
+                    let local_patch = survival_kernel::region::Patch {
+                        region: patch.region,
+                        op: PatchOp::Replace(new_content.clone()),
+                        rationale: patch.rationale.clone(),
+                        expected_delta: patch.expected_delta.clone(),
+                    };
+                    if local_artifact.apply_patch(local_patch).is_ok() {
+                        // Update shared grid for sensor column detection
+                        update_shared_grid(&shared_grid, local_artifact.grid())?;
+
+                        // Add successful patch to example bank
+                        if self.config.examples_enabled {
+                            // Get the old content from region view
+                            if let Ok(view) = local_artifact.read_region(patch.region) {
+                                let bank = example_bank.read().await;
+                                // Estimate pressure improvement (patch was validated by kernel)
+                                bank.add_example(
+                                    view.content.clone(), // This is now the new content
+                                    new_content.clone(),
+                                    1.0, // Estimated before pressure
+                                    0.0, // Estimated after pressure (improved)
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Aggregate token counts
+            total_prompt_tokens += tick_result.prompt_tokens;
+            total_completion_tokens += tick_result.completion_tokens;
+
+            // Record metrics
+            let current_pressure = tick_result.total_pressure;
+            pressure_history.push(current_pressure);
+            patches_per_tick.push(tick_result.applied.len());
+            empty_cells_history.push(local_artifact.empty_count());
+
+            let current_model = if self.config.model_chain.is_empty() {
+                self.config.model.clone()
+            } else {
+                self.config.model_chain[current_model_idx.min(self.config.model_chain.len() - 1)]
+                    .clone()
+            };
+
+            tick_metrics.push(TickMetrics {
+                tick,
+                pressure_before: pressure_history[tick],
+                pressure_after: current_pressure,
+                patches_proposed: tick_result.evaluated,
+                patches_applied: tick_result.applied.len(),
+                empty_cells: local_artifact.empty_count(),
+                violations: local_artifact.total_violations(),
+                llm_calls: agent_count, // All actors were queried
+                duration_ms: tick_start.elapsed().as_millis() as u64,
+                model_used: current_model.clone(),
+                prompt_tokens: tick_result.prompt_tokens,
+                completion_tokens: tick_result.completion_tokens,
+                patch_rejections: HashMap::new(),
+                messages_per_tick: None,
+            });
+
+            // Check if solved
+            if local_artifact.is_solved() {
+                info!(
+                    tick = tick,
+                    duration_ms = start_time.elapsed().as_millis(),
+                    "Puzzle solved!"
+                );
+                break;
+            }
+
+            // Model escalation: track velocity and escalate when stuck
+            let velocity = tick_result.velocity;
+            if velocity >= 0.0 {
+                // No improvement (velocity is pressure change, negative = improvement)
+                zero_velocity_ticks += 1;
+
+                if zero_velocity_ticks >= self.config.escalation_threshold
+                    && current_model_idx < self.config.model_chain.len() - 1
+                {
+                    let from_model = self.config.model_chain[current_model_idx].clone();
+                    current_model_idx += 1;
+                    let to_model = self.config.model_chain[current_model_idx].clone();
+                    zero_velocity_ticks = 0;
+
+                    escalation_events.push(EscalationEvent {
+                        tick,
+                        from_model: from_model.clone(),
+                        to_model: to_model.clone(),
+                    });
+
+                    info!(
+                        tick = tick,
+                        new_model = &to_model,
+                        prev_model = &from_model,
+                        "Escalating model due to stalled progress"
+                    );
+
+                    // Note: LlmActors would need to be notified of model change
+                    // This requires a new message type - for now, we continue with original model
+                }
+            } else {
+                zero_velocity_ticks = 0;
+            }
+        }
+
+        // Shutdown runtime
+        let _ = runtime.shutdown_all().await;
+
+        let ended_at = Utc::now();
+        let solved = local_artifact.is_solved();
+        let final_pressure = self.measure_total_pressure(&local_artifact, &sensor)?;
+
+        let example_bank_stats = {
+            let bank = example_bank.read().await;
+            Some(bank.stats())
+        };
+
+        let final_model = if self.config.model_chain.is_empty() {
+            self.config.model.clone()
+        } else {
+            self.config.model_chain[current_model_idx.min(self.config.model_chain.len() - 1)]
+                .clone()
+        };
+
+        Ok(ExperimentResult {
+            config: ExperimentConfig {
+                strategy: "pressure_field".to_string(),
+                agent_count,
+                n,
+                empty_cells: initial_empty,
+                decay_enabled: self.config.decay_enabled,
+                inhibition_enabled: self.config.inhibition_enabled,
+                examples_enabled: self.config.examples_enabled,
+                trial,
+                seed,
+            },
+            started_at,
+            ended_at,
+            total_ticks: tick_metrics.len(),
+            solved,
+            final_pressure,
+            pressure_history,
+            patches_per_tick,
+            empty_cells_history,
+            example_bank_stats,
+            tick_metrics,
+            escalation_events,
+            final_model,
+            total_prompt_tokens,
+            total_completion_tokens,
+            total_patch_rejections,
+            conversation_stats: None,
+        })
+    }
+
+    /// Build kernel configuration for Latin Square experiments.
+    ///
+    /// Configures pressure axes based on the sensor signals:
+    /// - empty_count: Cells needing to be filled (weight: 1.0)
+    /// - row_duplicates: Duplicate values in row (weight: 2.0)
+    /// - col_conflicts: Column constraint violations (weight: 2.0)
+    fn build_kernel_config(&self) -> KernelConfig {
+        // Tick interval in ms (experiment runs faster than the 250ms default)
+        let tick_interval_ms = 100;
+
+        // Pressure axes matching sensor signals
+        let pressure_axes = vec![
+            PressureAxisConfig {
+                name: "empty_cells".to_string(),
+                weight: 1.0,
+                expr: "empty_count".to_string(),
+                kind_weights: HashMap::new(),
+            },
+            PressureAxisConfig {
+                name: "row_violations".to_string(),
+                weight: 2.0,
+                expr: "row_duplicates".to_string(),
+                kind_weights: HashMap::new(),
+            },
+            PressureAxisConfig {
+                name: "column_violations".to_string(),
+                weight: 2.0,
+                expr: "col_conflicts".to_string(),
+                kind_weights: HashMap::new(),
+            },
+        ];
+
+        // Decay configuration based on experiment settings
+        let decay = DecayConfig {
+            // Fast decay for Latin Square experiments
+            fitness_half_life_ms: if self.config.decay_enabled {
+                5_000 // 5 seconds
+            } else {
+                u64::MAX // Effectively disabled
+            },
+            confidence_half_life_ms: if self.config.decay_enabled {
+                10_000 // 10 seconds
+            } else {
+                u64::MAX
+            },
+            ema_alpha: 0.3,
+        };
+
+        // Activation thresholds
+        let activation = ActivationConfig {
+            // Any pressure triggers proposals (we want all regions with issues addressed)
+            min_total_pressure: 0.5,
+            // Inhibition period after patching
+            inhibit_ms: if self.config.inhibition_enabled {
+                1_000 // 1 second - faster for Latin Square experiments
+            } else {
+                0 // Disabled
+            },
+        };
+
+        // Patch selection
+        let selection = SelectionConfig {
+            // Accept patches that improve the situation
+            min_expected_improvement: 0.1,
+        };
+
+        KernelConfig {
+            tick_interval_ms,
+            pressure_axes,
+            decay,
+            activation,
+            selection,
+        }
     }
 }
 

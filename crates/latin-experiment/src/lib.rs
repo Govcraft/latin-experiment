@@ -13,4 +13,5 @@ pub mod generator;
 pub mod llm_actor;
 pub mod results;
 pub mod sensors;
+pub mod tick_driver;
 pub mod vllm_client;
