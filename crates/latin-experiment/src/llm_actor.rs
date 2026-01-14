@@ -373,15 +373,14 @@ async fn generate_patch(
     };
 
     let prompt = format!(
-        r#"You are solving a Latin Square puzzle. Each row and column must contain each number from 1 to {n} exactly once.
+        r#"Latin Square {n}x{n}. Each row/column has 1-{n} exactly once.
 
-Current row {row_idx}: {content}
+Row {row_idx}: {content}
 
-Available values for each column (numbers NOT yet used in that column):
+Available per column:
 {availability_text}
 {examples_text}
-Fill all empty cells (_) with valid numbers from the available values.
-Return ONLY the complete row as space-separated numbers. Example: "1 2 3 4 5 6""#,
+Answer:"#,
         n = n,
         row_idx = row_idx,
         content = msg.region_view.content,

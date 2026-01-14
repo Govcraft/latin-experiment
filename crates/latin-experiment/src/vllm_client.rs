@@ -38,9 +38,7 @@ fn model_to_port(model: &str) -> Option<u16> {
 }
 
 /// Default system prompt for Latin Square solving.
-pub const LATIN_SYSTEM_PROMPT: &str = "You solve Latin Square puzzles. Given a row with \
-    empty cells (_), return ONLY the number(s) that fill them. Return just the numbers, \
-    nothing else.";
+pub const LATIN_SYSTEM_PROMPT: &str = "You solve Latin Square puzzles. When the user writes 'Answer:', your response must be ONLY the complete row as space-separated numbers (e.g., 1 2 3 4 5 6 7). No explanation, no other text.";
 
 /// vLLM client for chat completions.
 #[derive(Clone)]
