@@ -213,6 +213,36 @@ async fn main() -> Result<()> {
             println!("Solved: {}", result.solved);
             println!("Ticks: {}", result.total_ticks);
             println!("Final pressure: {:.2}", result.final_pressure);
+            println!("Final model: {}", result.final_model);
+
+            // Token usage metrics
+            println!("\nToken Usage:");
+            println!("  Total prompt tokens: {}", result.total_prompt_tokens);
+            println!("  Total completion tokens: {}", result.total_completion_tokens);
+            let total_tokens = result.total_prompt_tokens + result.total_completion_tokens;
+            println!("  Total tokens: {}", total_tokens);
+
+            // Patches summary
+            let total_patches: usize = result.patches_per_tick.iter().sum();
+            println!("\nPatches:");
+            println!("  Total applied: {}", total_patches);
+            if !result.total_patch_rejections.is_empty() {
+                println!("  Rejections by reason:");
+                for (reason, count) in &result.total_patch_rejections {
+                    println!("    {:?}: {}", reason, count);
+                }
+            }
+
+            // Escalation events
+            if !result.escalation_events.is_empty() {
+                println!("\nModel Escalations:");
+                for event in &result.escalation_events {
+                    println!(
+                        "  Tick {}: {} -> {}",
+                        event.tick, event.from_model, event.to_model
+                    );
+                }
+            }
 
             if let Some(stats) = &result.example_bank_stats {
                 println!("\nExample Bank Stats:");
@@ -233,9 +263,25 @@ async fn main() -> Result<()> {
                 );
             }
 
-            println!("\nPressure history:");
-            for (i, p) in result.pressure_history.iter().enumerate() {
-                println!("  Tick {}: {:.2}", i, p);
+            // Per-tick metrics summary (condensed)
+            println!("\nPer-Tick Metrics:");
+            println!(
+                "  {:>4} {:>8} {:>8} {:>6} {:>8} {:>10}",
+                "Tick", "P_before", "P_after", "Patched", "Tokens", "Model"
+            );
+            for tm in &result.tick_metrics {
+                let tick_tokens = tm.prompt_tokens + tm.completion_tokens;
+                // Shorten model name for display
+                let model_short = tm
+                    .model_used
+                    .split('/')
+                    .last()
+                    .unwrap_or(&tm.model_used)
+                    .replace("Qwen2.5-", "");
+                println!(
+                    "  {:>4} {:>8.2} {:>8.2} {:>6} {:>8} {:>10}",
+                    tm.tick, tm.pressure_before, tm.pressure_after, tm.patches_applied, tick_tokens, model_short
+                );
             }
         }
 
