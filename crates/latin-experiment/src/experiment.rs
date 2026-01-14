@@ -22,11 +22,14 @@ use survival_kernel::artifact::Artifact;
 use survival_kernel::config::{
     ActivationConfig, DecayConfig, KernelConfig, PressureAxisConfig, SelectionConfig,
 };
-use survival_kernel::{AsyncKernelBuilder, StopReason};
+use survival_kernel::{
+    AsyncKernelBuilder, PatchActorsReady, SensorsReady, Tick, TickComplete, TickResult,
+    WaitForPatchActors, WaitForSensors,
+};
 
 use crate::sensors::update_shared_grid;
 
-use crate::llm_actor::{LlmActor, LlmActorConfig, SamplingBand, SamplingConfig};
+use crate::llm_actor::{LlmActor, LlmActorConfig, SamplingBand, SamplingConfig, UpdateModel};
 
 use crate::artifact::LatinSquareArtifact;
 use crate::conversation::ConversationRunner;
@@ -857,7 +860,7 @@ What number goes in position {target_pos}? Return just the number."#,
     /// - LlmActors propose patches via broker pub/sub
     /// - RegionActors validate and apply patches
     /// - Internal TickActor drives the tick loop
-    /// - kernel.run() returns comprehensive results
+    /// - External tick loop with model escalation support
     async fn run_pressure_field_with_kernel(
         &self,
         artifact: LatinSquareArtifact,
@@ -871,12 +874,23 @@ What number goes in position {target_pos}? Return just the number."#,
 
         // Build kernel config
         let kernel_config = self.build_kernel_config();
+        let max_ticks = kernel_config.max_ticks;
+        let tick_interval_ms = kernel_config.tick_interval_ms;
 
         // Create acton runtime
         let mut runtime = ActonApp::launch_async().await;
 
         // Create semaphore for rate limiting LLM requests
         let semaphore = Arc::new(tokio::sync::Semaphore::new(self.config.max_concurrent_llm));
+
+        // Get initial model and host
+        let initial_model_idx = 0;
+        let initial_model = if self.config.model_chain.is_empty() {
+            self.config.model.clone()
+        } else {
+            self.config.model_chain[0].clone()
+        };
+        let initial_host = self.config.get_vllm_host(initial_model_idx).to_string();
 
         // Spawn LLM actors first - they self-register via PatchActorReady broadcast
         // Distribute actors across sampling bands for diversity
@@ -887,15 +901,9 @@ What number goes in position {target_pos}? Return just the number."#,
                 _ => SamplingBand::Exploration,
             };
 
-            let current_model = if self.config.model_chain.is_empty() {
-                self.config.model.clone()
-            } else {
-                self.config.model_chain[0].clone()
-            };
-
             let llm_config = LlmActorConfig {
-                host: self.config.vllm_host.clone(),
-                model: current_model,
+                host: initial_host.clone(),
+                model: initial_model.clone(),
                 sampling: SamplingConfig::random_in_band(band),
                 max_tokens: 256,
                 band,
@@ -911,22 +919,161 @@ What number goes in position {target_pos}? Return just the number."#,
             llm_actor.spawn(&mut runtime).await;
         }
 
-        // Build kernel and run to completion
-        // The kernel handles:
-        // - Spawning coordinator, sensors, region actors, tick actor
-        // - Waiting for patch actors to register
-        // - Running the tick loop internally
-        // - Collecting all metrics via internal observers
-        let kernel_result = AsyncKernelBuilder::new(kernel_config, Box::new(artifact.clone()))
-            .add_sensor(Box::new(sensor))
-            .run(&mut runtime, agent_count)
+        // Build kernel and spawn (without running tick loop)
+        let coordinator_handle =
+            AsyncKernelBuilder::new(kernel_config, Box::new(artifact.clone()))
+                .add_sensor(Box::new(sensor))
+                .spawn(&mut runtime)
+                .await;
+
+        // Create observer to collect TickComplete broadcasts
+        let (tick_tx, mut tick_rx) = tokio::sync::mpsc::channel::<TickResult>(1000);
+        spawn_tick_observer(&mut runtime, tick_tx).await;
+
+        // Create observers to wait for registrations
+        let (sensors_tx, mut sensors_rx) = tokio::sync::mpsc::channel::<SensorsReady>(1);
+        let (actors_tx, mut actors_rx) = tokio::sync::mpsc::channel::<PatchActorsReady>(1);
+
+        // Spawn SensorsReady observer (we have 1 sensor)
+        spawn_sensors_ready_observer(&mut runtime, sensors_tx).await;
+
+        // Spawn PatchActorsReady observer
+        spawn_patch_actors_ready_observer(&mut runtime, actors_tx).await;
+
+        // Wait for sensors to register
+        coordinator_handle
+            .send(WaitForSensors { expected_count: 1 })
             .await;
+        sensors_rx.recv().await;
+
+        // Wait for patch actors to register
+        if agent_count > 0 {
+            coordinator_handle
+                .send(WaitForPatchActors {
+                    expected_count: agent_count,
+                })
+                .await;
+            actors_rx.recv().await;
+        }
+
+        // External tick loop with escalation tracking
+        let mut tick_results = Vec::new();
+        let mut pressure_history = Vec::new();
+        let mut escalation_events = Vec::new();
+        let mut current_model_idx = initial_model_idx;
+        let mut current_model = initial_model;
+        let mut ticks_without_progress = 0;
+        let mut current_tick = 0usize;
+        let mut total_prompt_tokens = 0u32;
+        let mut total_completion_tokens = 0u32;
+        let mut final_pressure = 0.0;
+        let mut solved = false;
+
+        info!(
+            max_ticks,
+            escalation_threshold = self.config.escalation_threshold,
+            model_chain_len = self.config.model_chain.len(),
+            "Starting external tick loop with escalation support"
+        );
+
+        loop {
+            current_tick += 1;
+
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+
+            // Send Tick to coordinator
+            coordinator_handle.send(Tick { now_ms }).await;
+
+            // Wait for TickComplete via the observer channel
+            let Some(result) = tick_rx.recv().await else {
+                info!("TickComplete channel closed unexpectedly");
+                break;
+            };
+
+            // Track results
+            pressure_history.push(result.total_pressure);
+            total_prompt_tokens += result.prompt_tokens;
+            total_completion_tokens += result.completion_tokens;
+            final_pressure = result.total_pressure;
+
+            // Track velocity (consecutive ticks with no patches)
+            if result.applied.is_empty() {
+                ticks_without_progress += 1;
+            } else {
+                ticks_without_progress = 0;
+            }
+
+            let is_complete = result.is_complete;
+            tick_results.push(result);
+
+            // Check for escalation
+            if ticks_without_progress >= self.config.escalation_threshold {
+                if current_model_idx + 1 < self.config.model_chain.len() {
+                    let old_model = current_model.clone();
+                    current_model_idx += 1;
+                    current_model = self.config.model_chain[current_model_idx].clone();
+                    let new_host = self.config.get_vllm_host(current_model_idx).to_string();
+
+                    info!(
+                        tick = current_tick,
+                        from_model = %old_model,
+                        to_model = %current_model,
+                        new_host = %new_host,
+                        "Escalating model due to stall"
+                    );
+
+                    // Broadcast UpdateModel to all LLM actors
+                    runtime
+                        .broker()
+                        .broadcast(UpdateModel {
+                            model: current_model.clone(),
+                            host: new_host.clone(),
+                        })
+                        .await;
+
+                    escalation_events.push(EscalationEvent {
+                        tick: current_tick,
+                        from_model: old_model,
+                        to_model: current_model.clone(),
+                    });
+
+                    ticks_without_progress = 0;
+                }
+            }
+
+            // Check termination conditions
+            if is_complete {
+                solved = true;
+                info!(tick = current_tick, "Puzzle solved!");
+                break;
+            }
+            if max_ticks > 0 && current_tick >= max_ticks {
+                info!(tick = current_tick, "Max ticks reached");
+                break;
+            }
+            // Stop if fully escalated and still stuck
+            if current_model_idx == self.config.model_chain.len().saturating_sub(1)
+                && ticks_without_progress >= self.config.escalation_threshold
+            {
+                info!(
+                    tick = current_tick,
+                    model = %current_model,
+                    "Converged at largest model with no progress"
+                );
+                break;
+            }
+
+            // Wait for the interval before next tick
+            tokio::time::sleep(std::time::Duration::from_millis(tick_interval_ms)).await;
+        }
 
         // Shutdown runtime
         let _ = runtime.shutdown_all().await;
 
         let ended_at = Utc::now();
-        let solved = matches!(kernel_result.stop_reason, StopReason::Complete);
 
         // Get example bank stats
         let example_bank_stats = {
@@ -934,17 +1081,30 @@ What number goes in position {target_pos}? Return just the number."#,
             Some(bank.stats())
         };
 
-        // Build tick metrics from kernel results
-        let tick_metrics: Vec<TickMetrics> = kernel_result
-            .tick_results
+        // Build tick metrics from results
+        let tick_metrics: Vec<TickMetrics> = tick_results
             .iter()
             .enumerate()
             .map(|(tick, result)| {
                 let pressure_before = if tick > 0 {
-                    kernel_result.pressure_history.get(tick - 1).copied().unwrap_or(0.0)
+                    pressure_history.get(tick - 1).copied().unwrap_or(0.0)
                 } else {
-                    kernel_result.pressure_history.first().copied().unwrap_or(0.0)
+                    pressure_history.first().copied().unwrap_or(0.0)
                 };
+
+                // Determine which model was used at this tick
+                let model_at_tick = escalation_events
+                    .iter()
+                    .filter(|e| e.tick <= tick)
+                    .last()
+                    .map(|e| e.to_model.clone())
+                    .unwrap_or_else(|| {
+                        if self.config.model_chain.is_empty() {
+                            self.config.model.clone()
+                        } else {
+                            self.config.model_chain[0].clone()
+                        }
+                    });
 
                 TickMetrics {
                     tick,
@@ -952,11 +1112,11 @@ What number goes in position {target_pos}? Return just the number."#,
                     pressure_after: result.total_pressure,
                     patches_proposed: result.evaluated,
                     patches_applied: result.applied.len(),
-                    empty_cells: 0, // Not tracked per-tick in kernel
-                    violations: 0,  // Not tracked per-tick in kernel
+                    empty_cells: 0,
+                    violations: 0,
                     llm_calls: agent_count,
-                    duration_ms: 0, // Not tracked per-tick in kernel
-                    model_used: self.config.model.clone(),
+                    duration_ms: 0,
+                    model_used: model_at_tick,
                     prompt_tokens: result.prompt_tokens,
                     completion_tokens: result.completion_tokens,
                     patch_rejections: HashMap::new(),
@@ -965,11 +1125,7 @@ What number goes in position {target_pos}? Return just the number."#,
             })
             .collect();
 
-        let patches_per_tick: Vec<usize> = kernel_result
-            .tick_results
-            .iter()
-            .map(|r| r.applied.len())
-            .collect();
+        let patches_per_tick: Vec<usize> = tick_results.iter().map(|r| r.applied.len()).collect();
 
         Ok(ExperimentResult {
             config: ExperimentConfig {
@@ -985,18 +1141,18 @@ What number goes in position {target_pos}? Return just the number."#,
             },
             started_at: ctx.started_at,
             ended_at,
-            total_ticks: kernel_result.ticks_executed,
+            total_ticks: current_tick,
             solved,
-            final_pressure: kernel_result.final_pressure,
-            pressure_history: kernel_result.pressure_history,
+            final_pressure,
+            pressure_history,
             patches_per_tick,
-            empty_cells_history: Vec::new(), // Not tracked per-tick in kernel
+            empty_cells_history: Vec::new(),
             example_bank_stats,
             tick_metrics,
-            escalation_events: Vec::new(), // Model escalation not implemented in kernel yet
-            final_model: self.config.model.clone(),
-            total_prompt_tokens: kernel_result.prompt_tokens,
-            total_completion_tokens: kernel_result.completion_tokens,
+            escalation_events,
+            final_model: current_model,
+            total_prompt_tokens,
+            total_completion_tokens,
             total_patch_rejections: HashMap::new(),
             conversation_stats: None,
         })
@@ -1071,13 +1227,102 @@ What number goes in position {target_pos}? Return just the number."#,
         KernelConfig {
             tick_interval_ms,
             max_ticks: self.config.max_ticks,
-            stable_threshold: 3, // Stop after 3 stable ticks
+            stable_threshold: 0, // Disabled - external tick loop handles termination
             pressure_axes,
             decay,
             activation,
             selection,
         }
     }
+}
+
+/// Spawn an observer actor that collects TickComplete broadcasts.
+async fn spawn_tick_observer(
+    runtime: &mut ActorRuntime,
+    tx: tokio::sync::mpsc::Sender<TickResult>,
+) {
+    #[derive(Default, Clone, Debug)]
+    struct State {
+        tx: Option<tokio::sync::mpsc::Sender<TickResult>>,
+    }
+
+    let mut actor = runtime.new_actor_with_name::<State>("TickResultObserver".to_string());
+    actor.model.tx = Some(tx);
+
+    // Subscribe to TickComplete broadcasts
+    actor.handle().subscribe::<TickComplete>().await;
+
+    actor.act_on::<TickComplete>(|actor, context| {
+        let msg = context.message();
+        let mut result = msg.result.clone();
+        result.is_complete = msg.is_complete;
+        let tx = actor.model.tx.clone();
+        Reply::pending(async move {
+            if let Some(tx) = tx {
+                let _ = tx.send(result).await;
+            }
+        })
+    });
+
+    actor.start().await;
+}
+
+/// Spawn an observer actor that waits for SensorsReady broadcast.
+async fn spawn_sensors_ready_observer(
+    runtime: &mut ActorRuntime,
+    tx: tokio::sync::mpsc::Sender<SensorsReady>,
+) {
+    #[derive(Default, Clone, Debug)]
+    struct State {
+        tx: Option<tokio::sync::mpsc::Sender<SensorsReady>>,
+    }
+
+    let mut actor = runtime.new_actor_with_name::<State>("SensorsReadyObserver".to_string());
+    actor.model.tx = Some(tx);
+
+    // Subscribe to SensorsReady broadcasts
+    actor.handle().subscribe::<SensorsReady>().await;
+
+    actor.act_on::<SensorsReady>(|actor, context| {
+        let msg = context.message().clone();
+        let tx = actor.model.tx.clone();
+        Reply::pending(async move {
+            if let Some(tx) = tx {
+                let _ = tx.send(msg).await;
+            }
+        })
+    });
+
+    actor.start().await;
+}
+
+/// Spawn an observer actor that waits for PatchActorsReady broadcast.
+async fn spawn_patch_actors_ready_observer(
+    runtime: &mut ActorRuntime,
+    tx: tokio::sync::mpsc::Sender<PatchActorsReady>,
+) {
+    #[derive(Default, Clone, Debug)]
+    struct State {
+        tx: Option<tokio::sync::mpsc::Sender<PatchActorsReady>>,
+    }
+
+    let mut actor = runtime.new_actor_with_name::<State>("PatchActorsReadyObserver".to_string());
+    actor.model.tx = Some(tx);
+
+    // Subscribe to PatchActorsReady broadcasts
+    actor.handle().subscribe::<PatchActorsReady>().await;
+
+    actor.act_on::<PatchActorsReady>(|actor, context| {
+        let msg = context.message().clone();
+        let tx = actor.model.tx.clone();
+        Reply::pending(async move {
+            if let Some(tx) = tx {
+                let _ = tx.send(msg).await;
+            }
+        })
+    });
+
+    actor.start().await;
 }
 
 #[cfg(test)]

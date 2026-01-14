@@ -45,8 +45,8 @@ pub use messages::{
     ApplyDecay, CoordinatorReady, KernelComplete, MeasureRegion, MeasurementResult,
     PatchActorReady, PatchActorsReady, PatchProposal, PressureResponse, ProposeForRegion,
     QueryPressure, RefreshContent, RegionApplyPatch, RegionPatchResult, RegisterRegionActors,
-    SaveArtifact, SensorReady, SetOutputDir, StopReason, Tick, TickComplete, ValidatePatch,
-    ValidatePatchResponse, WaitForPatchActors,
+    SaveArtifact, SensorReady, SensorsReady, SetOutputDir, StopReason, Tick, TickComplete,
+    ValidatePatch, ValidatePatchResponse, WaitForPatchActors, WaitForSensors,
 };
 pub use pressure::{measure_pressure_inline, Pressure, PressureVector, Sensor, Signals};
 pub use region::{Patch, PatchOp, RegionId, RegionState, RegionView};

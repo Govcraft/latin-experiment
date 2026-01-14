@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use tracing::{info, Level};
+use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 use latin_experiment::experiment::{ExperimentRunner, ExperimentRunnerConfig, Strategy};
 use latin_experiment::generator::Difficulty;
@@ -181,6 +183,22 @@ async fn main() -> Result<()> {
         .with_target(false)
         .compact()
         .init();
+
+    // Log version and configuration at startup
+    info!(version = VERSION, "latin-experiment starting");
+    info!(vllm_host = %cli.vllm_host, "Primary vLLM host");
+    if let Some(ref hosts) = cli.vllm_hosts {
+        if !hosts.is_empty() {
+            info!(vllm_hosts = ?hosts, "vLLM hosts for escalation");
+        }
+    } else {
+        warn!("No --vllm-hosts provided, model escalation will use single host");
+    }
+    info!(
+        model_chain = ?cli.model_chain,
+        escalation_threshold = cli.escalation_threshold,
+        "Model escalation config"
+    );
 
     match cli.command {
         Commands::Single {

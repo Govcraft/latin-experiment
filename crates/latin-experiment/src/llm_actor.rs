@@ -123,8 +123,8 @@ impl Default for LlmActorConfig {
 pub struct LlmActorState {
     /// Actor name
     pub name: String,
-    /// LLM configuration
-    pub config: Option<LlmActorConfig>,
+    /// LLM configuration (wrapped for interior mutability during escalation)
+    pub config: Option<Arc<RwLock<LlmActorConfig>>>,
     /// Semaphore for rate limiting concurrent LLM requests
     pub semaphore: Option<Arc<Semaphore>>,
     /// Example bank for few-shot learning
@@ -138,6 +138,18 @@ impl std::fmt::Debug for LlmActorState {
             .field("has_example_bank", &self.example_bank.is_some())
             .finish()
     }
+}
+
+/// Message to update the model/host for escalation.
+///
+/// Broadcast to all LLM actors when the experiment detects a stall
+/// and wants to escalate to a larger model.
+#[derive(Clone, Debug)]
+pub struct UpdateModel {
+    /// New model name (e.g., "Qwen/Qwen2.5-7B")
+    pub model: String,
+    /// New vLLM host URL (e.g., "http://localhost:8004")
+    pub host: String,
 }
 
 /// LLM actor for proposing Latin Square improvements.
@@ -183,7 +195,7 @@ impl LlmActor {
         let mut actor = runtime.new_actor_with_name::<LlmActorState>(self.name.clone());
 
         actor.model.name = self.name;
-        actor.model.config = Some(self.config);
+        actor.model.config = Some(Arc::new(RwLock::new(self.config)));
         actor.model.semaphore = Some(self.semaphore);
         actor.model.example_bank = Some(self.example_bank);
 
@@ -193,6 +205,9 @@ impl LlmActor {
         // Subscribe to CoordinatorReady - we'll respond with PatchActorReady
         // This ensures the coordinator exists before we try to register
         actor.handle().subscribe::<CoordinatorReady>().await;
+
+        // Subscribe to UpdateModel for model escalation
+        actor.handle().subscribe::<UpdateModel>().await;
 
         // Handle CoordinatorReady by broadcasting PatchActorReady
         actor.act_on::<CoordinatorReady>(|actor, _context| {
@@ -246,7 +261,9 @@ fn configure_llm_actor(actor: &mut ManagedActor<Idle, LlmActorState>) {
                 vec![]
             };
 
-            let result = generate_patch(&config, &msg, &examples).await;
+            // Read lock the config to get current model/host (may have been updated by escalation)
+            let config_snapshot = config.read().await.clone();
+            let result = generate_patch(&config_snapshot, &msg, &examples).await;
             // Permit is dropped here, releasing the slot
 
             let (patches, prompt_tokens, completion_tokens) = match result {
@@ -273,6 +290,26 @@ fn configure_llm_actor(actor: &mut ManagedActor<Idle, LlmActorState>) {
 
             // Broadcast result (coordinator subscribes to PatchProposal)
             broker.broadcast(proposal).await;
+        })
+    });
+
+    // Handle UpdateModel for model escalation
+    actor.act_on::<UpdateModel>(|actor, context| {
+        let msg = context.message().clone();
+        let config = actor.model.config.clone();
+
+        Reply::pending(async move {
+            if let Some(config) = config {
+                let mut config_guard = config.write().await;
+                info!(
+                    old_model = %config_guard.model,
+                    new_model = %msg.model,
+                    new_host = %msg.host,
+                    "Updating model for escalation"
+                );
+                config_guard.model = msg.model;
+                config_guard.host = msg.host;
+            }
         })
     });
 }
