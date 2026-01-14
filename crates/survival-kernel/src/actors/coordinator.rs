@@ -729,18 +729,28 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             return Reply::ready();
         };
 
-        // Collect and sort all patches by score
-        let mut all_patches: Vec<(f64, Patch)> = pending
+        // Group patches by region and select best patch for each eligible region
+        let all_patches: Vec<(f64, Patch)> = pending
             .proposals
             .into_iter()
             .flat_map(|p| p.patches)
             .collect();
 
-        all_patches.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Keep only the highest-scored patch per region
+        let mut best_per_region: HashMap<RegionId, (f64, Patch)> = HashMap::new();
+        for (score, patch) in all_patches {
+            best_per_region
+                .entry(patch.region)
+                .and_modify(|existing| {
+                    if score > existing.0 {
+                        *existing = (score, patch.clone());
+                    }
+                })
+                .or_insert((score, patch));
+        }
 
-        // Take top patches
-        let max_patches = config.selection.max_patches_per_tick;
-        let top_patches: Vec<_> = all_patches.into_iter().take(max_patches).collect();
+        // Each eligible region gets its best patch
+        let top_patches: Vec<_> = best_per_region.into_values().collect();
 
         if top_patches.is_empty() {
             // No patches to apply - calculate total pressure from high_pressure_regions

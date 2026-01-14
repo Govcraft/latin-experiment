@@ -70,9 +70,6 @@ pub struct ActivationConfig {
 /// Selection configuration: how to choose among candidate patches.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SelectionConfig {
-    /// Maximum patches to apply per tick
-    pub max_patches_per_tick: usize,
-
     /// Minimum expected improvement to accept a patch
     pub min_expected_improvement: f64,
 }
@@ -92,7 +89,6 @@ impl Default for KernelConfig {
                 inhibit_ms: 30_000,
             },
             selection: SelectionConfig {
-                max_patches_per_tick: 3,
                 min_expected_improvement: 0.15,
             },
         }
