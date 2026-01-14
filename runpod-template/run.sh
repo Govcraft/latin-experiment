@@ -16,6 +16,13 @@ echo "Time: $(date)"
 MODELS_DIR="${MODELS_DIR:-/workspace/models}"
 mkdir -p "$MODELS_DIR" /workspace/results
 
+# Persist vLLM compilation cache across pod restarts
+# vLLM 0.13+ compiles CUDA graphs on first start, which is slow
+# By storing in /workspace, subsequent pod starts reuse the cache
+mkdir -p /workspace/.cache
+export XDG_CACHE_HOME=/workspace/.cache
+echo "vLLM cache directory: $XDG_CACHE_HOME/vllm"
+
 # Download models if not already present
 # Verifies tokenizer files exist (not just config.json)
 download_model() {
@@ -161,10 +168,10 @@ start_vllm_server "Qwen2.5-3B" 8003 0.12
 wait_for_server 8003 "Qwen2.5-3B" 120 || exit 1
 
 start_vllm_server "Qwen2.5-7B" 8004 0.22
-wait_for_server 8004 "Qwen2.5-7B" 180 || exit 1
+wait_for_server 8004 "Qwen2.5-7B" 300 || exit 1
 
 start_vllm_server "Qwen2.5-14B" 8005 0.43
-wait_for_server 8005 "Qwen2.5-14B" 240 || exit 1
+wait_for_server 8005 "Qwen2.5-14B" 600 || exit 1
 
 echo ""
 echo "All vLLM servers ready!"
