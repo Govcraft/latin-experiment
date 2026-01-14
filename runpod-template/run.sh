@@ -3,7 +3,7 @@
 # Startup script for Latin Square Experiment Pod
 #
 # Downloads models to /workspace/models on first run (persists across restarts).
-# Starts 5 vLLM servers (one per model) and runs experiments.
+# Starts 3 vLLM servers (3B, 7B, 14B) and runs experiments.
 # Results are saved to /workspace/results (persistent network drive).
 
 set -euo pipefail
@@ -74,8 +74,7 @@ if [[ "${FORCE_REDOWNLOAD:-}" == "1" ]]; then
     rm -rf "$MODELS_DIR"/*
 fi
 
-download_model "Qwen2.5-0.5B" || exit 1
-download_model "Qwen2.5-1.5B" || exit 1
+# Only download models we use (3B, 7B, 14B) - skip 0.5B and 1.5B for efficiency
 download_model "Qwen2.5-3B" || exit 1
 download_model "Qwen2.5-7B" || exit 1
 download_model "Qwen2.5-14B" || exit 1
@@ -86,25 +85,23 @@ echo "All models ready!"
 # Diagnostic: List all model directories with tokenizer files
 echo ""
 echo "=== Model Directory Summary ==="
-for model in Qwen2.5-0.5B Qwen2.5-1.5B Qwen2.5-3B Qwen2.5-7B Qwen2.5-14B; do
+for model in Qwen2.5-3B Qwen2.5-7B Qwen2.5-14B; do
     echo "$model:"
     ls -la "$MODELS_DIR/$model/"*token* "$MODELS_DIR/$model/"*vocab* 2>/dev/null | head -5 || echo "  WARNING: No tokenizer files found!"
 done
 
 # Start vLLM servers for each model in the escalation chain
-# Each model runs on a different port (8001-8005)
+# Each model runs on a different port (8003-8005)
 # The experiment uses HuggingFace model names which map to these ports
 
 echo ""
 echo "=== Starting vLLM Servers ==="
-echo "Starting 5 vLLM instances for model escalation chain..."
+echo "Starting 3 vLLM instances for model escalation chain (3B, 7B, 14B)..."
 
-# Model-to-port mapping with GPU memory allocation (generous for vLLM overhead):
-# Port 8001: 0.5B (5%)
-# Port 8002: 1.5B (8%)
-# Port 8003: 3B (12%)
-# Port 8004: 7B (22%)
-# Port 8005: 14B (43%)
+# Model-to-port mapping with GPU memory allocation:
+# Port 8003: 3B (16%)
+# Port 8004: 7B (26%)
+# Port 8005: 14B (48%)
 # Total: 90% of 80GB
 
 start_vllm_server() {
@@ -157,20 +154,14 @@ wait_for_server() {
 echo ""
 echo "Starting vLLM servers sequentially (to avoid init conflicts)..."
 
-# Start smallest model first, wait for it, then proceed
-start_vllm_server "Qwen2.5-0.5B" 8001 0.05
-wait_for_server 8001 "Qwen2.5-0.5B" 120 || exit 1
-
-start_vllm_server "Qwen2.5-1.5B" 8002 0.08
-wait_for_server 8002 "Qwen2.5-1.5B" 120 || exit 1
-
-start_vllm_server "Qwen2.5-3B" 8003 0.12
+# Start 3B, 7B, 14B models (skip 0.5B, 1.5B for efficiency)
+start_vllm_server "Qwen2.5-3B" 8003 0.16
 wait_for_server 8003 "Qwen2.5-3B" 120 || exit 1
 
-start_vllm_server "Qwen2.5-7B" 8004 0.22
+start_vllm_server "Qwen2.5-7B" 8004 0.26
 wait_for_server 8004 "Qwen2.5-7B" 300 || exit 1
 
-start_vllm_server "Qwen2.5-14B" 8005 0.43
+start_vllm_server "Qwen2.5-14B" 8005 0.48
 wait_for_server 8005 "Qwen2.5-14B" 600 || exit 1
 
 echo ""
