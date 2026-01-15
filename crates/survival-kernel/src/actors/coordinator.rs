@@ -1039,8 +1039,37 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
 
     // Handle RegionPatchResult - collect results and complete tick
     actor.mutate_on::<RegionPatchResult>(|actor, context| {
-        let result = context.message().clone();
+        let mut result = context.message().clone();
         let correlation_id = result.correlation_id.clone();
+
+        // RE-EVALUATE against current artifact state BEFORE storing result.
+        // This prevents concurrent patch conflicts where multiple patches pass
+        // initial evaluation but conflict when applied sequentially.
+        if result.success && result.new_content.is_some() {
+            if let Some(artifact) = actor.model.artifact.as_ref() {
+                let patch = Patch {
+                    region: result.region_id.clone(),
+                    op: crate::region::PatchOp::Replace(
+                        result.new_content.clone().unwrap_or_default(),
+                    ),
+                    rationale: String::new(),
+                    expected_delta: HashMap::new(),
+                };
+
+                let (still_valid, actual_delta) = artifact.evaluate_patch(&patch);
+
+                if !still_valid {
+                    debug!(
+                        region = %result.region_id,
+                        original_delta = result.pressure_delta,
+                        actual_delta = actual_delta,
+                        "Patch rejected on re-evaluation - conflict with prior patch"
+                    );
+                    result.success = false;
+                    result.pressure_delta = actual_delta;
+                }
+            }
+        }
 
         let Some(mut pending) = actor.model.pending_patches.get_mut(&correlation_id) else {
             warn!(
@@ -1050,14 +1079,14 @@ fn configure_handlers(actor: &mut ManagedActor<Idle, KernelCoordinatorState>) {
             return Reply::ready();
         };
 
-        // Store result
+        // Store result (with updated success status if re-evaluation failed)
         pending.results.push(result.clone());
 
         // Check if all results received (check before dropping lock)
         let is_complete = pending.is_complete();
         drop(pending); // Release the lock before potentially modifying artifact
 
-        // If patch was successful, update the artifact
+        // If patch was successful (including re-evaluation), update the artifact
         if result.success
             && let (Some(artifact), Some(new_content)) =
                 (actor.model.artifact.as_mut(), &result.new_content)
