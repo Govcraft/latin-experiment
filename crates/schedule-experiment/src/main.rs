@@ -68,7 +68,7 @@ enum Commands {
     /// Run a grid of experiments.
     Grid {
         /// Number of trials per configuration
-        #[arg(short, long, default_value = "10")]
+        #[arg(short, long, default_value = "30")]
         trials: usize,
         /// Strategies (comma-separated)
         #[arg(short, long, default_value = "pressure_field,sequential,random,hierarchical")]
@@ -76,9 +76,9 @@ enum Commands {
         /// Agent counts (comma-separated)
         #[arg(short, long, default_value = "1,2,4")]
         agents: String,
-        /// Difficulty: easy, medium, hard
-        #[arg(short, long, default_value = "easy")]
-        difficulty: String,
+        /// Difficulties (comma-separated): easy, medium, hard
+        #[arg(short, long, default_value = "easy,medium,hard")]
+        difficulties: String,
         /// Maximum ticks
         #[arg(long, default_value = "50")]
         max_ticks: usize,
@@ -221,7 +221,7 @@ async fn main() -> Result<()> {
             trials,
             strategies,
             agents,
-            difficulty,
+            difficulties,
             max_ticks,
             output,
         } => {
@@ -235,49 +235,60 @@ async fn main() -> Result<()> {
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
 
-            let generator_config = parse_difficulty(&difficulty);
+            let difficulty_names: Vec<&str> = difficulties
+                .split(',')
+                .map(|s| s.trim())
+                .collect();
 
             info!(
                 strategies = ?strategies.iter().map(|s| s.name()).collect::<Vec<_>>(),
                 agent_counts = ?agent_counts,
+                difficulties = ?difficulty_names,
                 trials,
                 "Starting grid experiment"
             );
 
-            let config = ExperimentRunnerConfig {
-                vllm_host: cli.host.clone(),
-                generator_config,
-                max_ticks,
-                ..Default::default()
-            };
-
-            let runner = ExperimentRunner::new(config);
             let mut results: Vec<ExperimentResult> = Vec::new();
 
-            for strategy in &strategies {
-                for &agent_count in &agent_counts {
-                    for trial in 0..trials {
-                        info!(
-                            strategy = strategy.name(),
-                            agents = agent_count,
-                            trial,
-                            "Running experiment"
-                        );
+            for difficulty in &difficulty_names {
+                let generator_config = parse_difficulty(difficulty);
 
-                        let seed = Some((trial as u64) * 1000 + (agent_count as u64));
-                        let result = runner.run(*strategy, agent_count, trial, seed).await?;
+                let config = ExperimentRunnerConfig {
+                    vllm_host: cli.host.clone(),
+                    generator_config,
+                    max_ticks,
+                    ..Default::default()
+                };
 
-                        println!(
-                            "{} agents={} trial={}: solved={} ticks={} pressure={:.2}",
-                            strategy.name(),
-                            agent_count,
-                            trial,
-                            result.solved,
-                            result.total_ticks,
-                            result.final_pressure
-                        );
+                let runner = ExperimentRunner::new(config);
 
-                        results.push(result);
+                for strategy in &strategies {
+                    for &agent_count in &agent_counts {
+                        for trial in 0..trials {
+                            info!(
+                                difficulty = %difficulty,
+                                strategy = strategy.name(),
+                                agents = agent_count,
+                                trial,
+                                "Running experiment"
+                            );
+
+                            let seed = Some((trial as u64) * 1000 + (agent_count as u64));
+                            let result = runner.run(*strategy, agent_count, trial, seed).await?;
+
+                            println!(
+                                "{} difficulty={} agents={} trial={}: solved={} ticks={} pressure={:.2}",
+                                strategy.name(),
+                                difficulty,
+                                agent_count,
+                                trial,
+                                result.solved,
+                                result.total_ticks,
+                                result.final_pressure
+                            );
+
+                            results.push(result);
+                        }
                     }
                 }
             }
