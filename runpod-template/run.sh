@@ -98,9 +98,9 @@ echo ""
 echo "=== Starting vLLM Servers ==="
 echo "Starting 3 vLLM instances for model escalation chain (3B, 7B, 14B)..."
 
-# Model-to-GPU and port mapping:
-# GPU 0: 3B (port 8003, 25%) + 7B (port 8004, 45%) = 70%
-# GPU 1: 14B (port 8005, 85%) - dedicated GPU for largest model
+# Single GPU configuration (all models on GPU 0):
+# 3B: ~7GB, 7B: ~16GB, 14B: ~32GB = ~55GB total
+# With max-model-len 2048, this fits on an 80GB GPU
 
 start_vllm_server() {
     local model=$1
@@ -153,15 +153,15 @@ wait_for_server() {
 echo ""
 echo "Starting vLLM servers sequentially (to avoid init conflicts)..."
 
-# GPU 0: 3B and 7B (smaller models share one GPU)
-start_vllm_server "Qwen2.5-3B" 8003 0.25 0
+# All models on GPU 0 with memory allocations sized for single 80GB GPU
+# Memory fractions: 3B=0.12, 7B=0.22, 14B=0.45 (~63GB total, leaves headroom)
+start_vllm_server "Qwen2.5-3B" 8003 0.12 0
 wait_for_server 8003 "Qwen2.5-3B" 120 || exit 1
 
-start_vllm_server "Qwen2.5-7B" 8004 0.45 0
+start_vllm_server "Qwen2.5-7B" 8004 0.22 0
 wait_for_server 8004 "Qwen2.5-7B" 300 || exit 1
 
-# GPU 1: 14B (largest model gets dedicated GPU)
-start_vllm_server "Qwen2.5-14B" 8005 0.85 1
+start_vllm_server "Qwen2.5-14B" 8005 0.45 0
 wait_for_server 8005 "Qwen2.5-14B" 600 || exit 1
 
 echo ""
