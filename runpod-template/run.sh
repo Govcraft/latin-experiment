@@ -195,7 +195,7 @@ echo "  OUTPUT_DIR=$OUTPUT_DIR"
 echo "  VLLM_HOSTS=$VLLM_HOSTS"
 echo ""
 
-./run-experiments.sh --parallel $PARALLEL --trials $TRIALS all
+./run-experiments.sh --parallel $PARALLEL --trials $TRIALS pressure-field-only
 
 echo ""
 echo "=== Experiments Complete ==="
