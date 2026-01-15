@@ -15,7 +15,7 @@ use chrono::Utc;
 use futures::future::join_all;
 use rand::Rng;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use acton_reactive::prelude::*;
 use survival_kernel::artifact::Artifact;
@@ -230,7 +230,14 @@ impl ExperimentRunner {
                 started_at,
             };
             return self
-                .run_pressure_field_with_kernel(artifact, example_bank, sensor, agent_count, ctx)
+                .run_pressure_field_with_kernel(
+                    artifact,
+                    example_bank,
+                    sensor,
+                    shared_grid.clone(),
+                    agent_count,
+                    ctx,
+                )
                 .await;
         }
 
@@ -863,9 +870,10 @@ What number goes in position {target_pos}? Return just the number."#,
     /// - External tick loop with model escalation support
     async fn run_pressure_field_with_kernel(
         &self,
-        artifact: LatinSquareArtifact,
+        mut artifact: LatinSquareArtifact,
         example_bank: Arc<RwLock<ExampleBank>>,
         sensor: LatinSquareSensor,
+        shared_grid: SharedGrid,
         agent_count: usize,
         ctx: RunContext,
     ) -> Result<ExperimentResult> {
@@ -1004,6 +1012,18 @@ What number goes in position {target_pos}? Return just the number."#,
                 ticks_without_progress += 1;
             } else {
                 ticks_without_progress = 0;
+
+                // Apply patches to local artifact copy to keep shared_grid in sync
+                // This is critical: the sensor validates patches using shared_grid,
+                // so it must reflect the current grid state after each applied patch
+                for patch in &result.applied {
+                    if let Err(e) = artifact.apply_patch(patch.clone()) {
+                        warn!(error = %e, "Failed to apply patch to local artifact");
+                    }
+                }
+                if let Err(e) = update_shared_grid(&shared_grid, artifact.grid()) {
+                    warn!(error = %e, "Failed to update shared grid");
+                }
             }
 
             let is_complete = result.is_complete;

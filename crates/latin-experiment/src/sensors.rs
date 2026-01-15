@@ -254,4 +254,127 @@ mod tests {
         assert_eq!(signals["col_conflicts"], 0.0);
         assert_eq!(signals["completeness"], 1.0);
     }
+
+    /// Test that update_shared_grid correctly synchronizes the sensor's view.
+    ///
+    /// This test validates the fix for the bug where shared_grid was never
+    /// updated in the kernel path, causing sensors to validate patches against
+    /// stale grid state and incorrectly detect column conflicts.
+    #[test]
+    fn test_shared_grid_update_affects_column_conflict_detection() {
+        // Initial grid state: row 0 has value 2 in column 1
+        let shared_grid = Arc::new(RwLock::new(vec![
+            vec![Some(1), Some(2), None, None],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+        ]));
+        let sensor = LatinSquareSensor::new(4, shared_grid.clone());
+
+        // If row 1 also puts 2 in column 1, we have a column conflict
+        let view_row1_with_conflict = RegionView {
+            id: Uuid::nil(),
+            kind: "row".to_string(),
+            content: "3 2 _ _".to_string(), // 2 in column 1 conflicts with row 0
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("row_index".to_string(), serde_json::json!(1));
+                m
+            },
+        };
+
+        let signals = sensor.measure(&view_row1_with_conflict).unwrap();
+        assert_eq!(signals["col_conflicts"], 1.0, "Should detect conflict with row 0's column 1");
+
+        // Now simulate a patch that changes row 0's column 1 from 2 to 4
+        // After update_shared_grid, the conflict should no longer exist
+        let new_grid_state = vec![
+            vec![Some(1), Some(4), None, None], // Changed: column 1 is now 4
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+        ];
+        update_shared_grid(&shared_grid, &new_grid_state).unwrap();
+
+        // Same row 1 content should now have no column conflict
+        let signals = sensor.measure(&view_row1_with_conflict).unwrap();
+        assert_eq!(
+            signals["col_conflicts"], 0.0,
+            "After shared_grid update, conflict should be resolved"
+        );
+    }
+
+    /// Test that demonstrates the bug: if shared_grid is NOT updated,
+    /// the sensor sees stale state and makes wrong decisions.
+    #[test]
+    fn test_stale_shared_grid_causes_incorrect_validation() {
+        // Grid starts with row 0 having 1,2,3,4
+        let shared_grid = Arc::new(RwLock::new(vec![
+            vec![Some(1), Some(2), Some(3), Some(4)],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+        ]));
+        let sensor = LatinSquareSensor::new(4, shared_grid.clone());
+
+        // Row 1 proposes 2,1,4,3 - this should be valid (no conflicts)
+        let view_row1 = RegionView {
+            id: Uuid::nil(),
+            kind: "row".to_string(),
+            content: "2 1 4 3".to_string(),
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("row_index".to_string(), serde_json::json!(1));
+                m
+            },
+        };
+
+        let signals = sensor.measure(&view_row1).unwrap();
+        assert_eq!(signals["col_conflicts"], 0.0, "Row 1's 2,1,4,3 has no conflicts with row 0");
+
+        // Suppose the kernel applied a patch to row 0, changing it to 2,1,3,4
+        // But we DO NOT call update_shared_grid (simulating the bug)
+        // The sensor still thinks row 0 is 1,2,3,4
+
+        // If row 1 now proposes 1,2,4,3, sensor incorrectly sees no conflict
+        // because it checks against stale 1,2,3,4 instead of actual 2,1,3,4
+        let view_row1_bug = RegionView {
+            id: Uuid::nil(),
+            kind: "row".to_string(),
+            content: "1 2 4 3".to_string(), // Should conflict with actual row 0: 2,1,3,4
+            metadata: {
+                let mut m = HashMap::new();
+                m.insert("row_index".to_string(), serde_json::json!(1));
+                m
+            },
+        };
+
+        // With stale grid (1,2,3,4 in row 0), this row (1,2,4,3) appears to have conflicts
+        let signals = sensor.measure(&view_row1_bug).unwrap();
+        assert_eq!(
+            signals["col_conflicts"], 2.0,
+            "Against stale row 0 (1,2,3,4), row 1 (1,2,4,3) has 2 conflicts at columns 0 and 1"
+        );
+
+        // Now properly update shared_grid to reflect actual row 0 state
+        let actual_grid_state = vec![
+            vec![Some(2), Some(1), Some(3), Some(4)], // Row 0 was actually changed to 2,1,3,4
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+            vec![None, None, None, None],
+        ];
+        update_shared_grid(&shared_grid, &actual_grid_state).unwrap();
+
+        // Now sensor correctly detects different conflicts
+        let signals = sensor.measure(&view_row1_bug).unwrap();
+        // Row 1 (1,2,4,3) vs actual row 0 (2,1,3,4):
+        // Col 0: row0=2, row1=1 - no conflict
+        // Col 1: row0=1, row1=2 - no conflict
+        // Col 2: row0=3, row1=4 - no conflict
+        // Col 3: row0=4, row1=3 - no conflict
+        assert_eq!(
+            signals["col_conflicts"], 0.0,
+            "Against actual row 0 (2,1,3,4), row 1 (1,2,4,3) has no conflicts"
+        );
+    }
 }

@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_system_prompt_constant() {
         assert!(LATIN_SYSTEM_PROMPT.contains("Latin Square"));
-        assert!(LATIN_SYSTEM_PROMPT.contains("empty cells"));
+        assert!(LATIN_SYSTEM_PROMPT.contains("space-separated numbers"));
     }
 
     #[test]
