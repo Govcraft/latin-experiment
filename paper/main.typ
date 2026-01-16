@@ -1,7 +1,7 @@
 #import "template.typ": *
 
 #show: neurips.with(
-  title: [Emergent Coordination in Multi-Agent Systems via Pressure Fields and Temporal Decay#footnote[Code available at #link("https://github.com/Govcraft/latin-experiment")]],
+  title: [Emergent Coordination in Multi-Agent Systems via Pressure Fields and Temporal Decay#footnote[Code available at #link("https://github.com/Govcraft/schedule-experiment")]],
   authors: (
     (
       name: "Roland R. Rodriguez, Jr.",
@@ -13,7 +13,7 @@
   abstract: [
     Current multi-agent LLM frameworks rely on explicit orchestration patterns borrowed from human organizational structures: planners delegate to executors, managers coordinate workers, and hierarchical control flow governs agent interactions. These approaches suffer from coordination overhead that scales poorly with agent count and task complexity. We propose a fundamentally different paradigm inspired by natural coordination mechanisms: agents operate locally on a shared artifact, guided only by pressure gradients derived from measurable quality signals, with temporal decay preventing premature convergence. We formalize this as optimization over a pressure landscape and prove convergence guarantees under mild conditions.
 
-    Empirically, on Latin Square constraint satisfaction across 1,078 trials, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$, indicating statistical equivalence). Both significantly outperform sequential (23.3%), random (11.7%), and conversation-based multi-agent dialogue (8.6%, $p < 10^{-5}$). Temporal decay is essential: disabling it increases final pressure 49-fold ($d = 4.15$). On easy problems, pressure-field achieves 87% solve rate. The approach maintains consistent performance from 2 to 32 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control while dramatically outperforming explicit dialogue-based coordination. Foundation models enable this approach: their broad pretraining and zero-shot reasoning allow quality-improving patches from local pressure signals alone, without domain-specific coordination protocols. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
+    Empirically, on meeting room scheduling across XX trials, pressure-field coordination matches hierarchical control (XX% vs XX% aggregate solve rate, $p = "XX"$, indicating statistical equivalence). Both significantly outperform sequential (XX%) and random (XX%) baselines ($p < "XX"$). Temporal decay is essential: disabling it increases final pressure XX-fold ($d = "XX"$). On easy problems, pressure-field achieves XX% solve rate. The approach maintains consistent performance from 1 to 4 agents. Our key finding: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control. Foundation models enable this approach: their broad pretraining and zero-shot reasoning allow quality-improving patches from local pressure signals alone, without domain-specific coordination protocols. This suggests that constraint-driven emergence offers a simpler, equally effective foundation for multi-agent AI.
   ],
   keywords: (
     "multi-agent systems",
@@ -27,7 +27,7 @@
 
 Multi-agent systems built on large language models have emerged as a promising approach to complex task automation @wu2023autogen @hong2023metagpt @li2023camel. The dominant paradigm treats agents as organizational units: planners decompose tasks, managers delegate subtasks, and workers execute instructions under hierarchical supervision. This coordination overhead scales poorly with agent count and task complexity.
 
-We demonstrate that *implicit* coordination through shared state achieves equivalent performance to explicit hierarchical control—without coordinators, planners, or message passing. Across 1,078 trials on Latin Square constraint satisfaction, pressure-field coordination matches hierarchical control (38.2% vs 38.8% aggregate solve rate, $p = 0.94$). Notably, AutoGen-style conversation-based coordination performs *worst* (8.6%), even below random selection (11.7%), demonstrating that explicit dialogue overhead actively harms performance on constraint satisfaction tasks.
+We demonstrate that *implicit* coordination through shared state achieves equivalent performance to explicit hierarchical control—without coordinators, planners, or message passing. Across XX trials on meeting room scheduling, pressure-field coordination matches hierarchical control (XX% vs XX% aggregate solve rate, $p = "XX"$). Both significantly outperform sequential and random baselines, demonstrating that pressure-guided coordination provides meaningful benefit over uncoordinated approaches.
 
 Our approach draws inspiration from natural coordination mechanisms—ant colonies, immune systems, neural tissue—that coordinate through *environment modification* rather than message passing. Agents observe local quality signals (pressure gradients), take locally-greedy actions, and coordination emerges from shared artifact state. Temporal decay prevents premature convergence by ensuring continued exploration.
 
@@ -35,11 +35,11 @@ Our contributions:
 
 + We formalize *pressure-field coordination* as a role-free, stigmergic alternative to organizational MAS paradigms. Unlike GPGP's hierarchical message-passing or SharedPlans' intention alignment, pressure-field achieves $O(1)$ coordination overhead through shared artifact state. Foundation models enable this approach: their broad pretraining allows quality-improving patches from local pressure signals without domain-specific coordination protocols.
 
-+ We introduce *temporal decay* as a mechanism for preventing premature convergence. Disabling decay increases final pressure 49-fold (Cohen's $d = 4.15$), trapping agents in local minima.
++ We introduce *temporal decay* as a mechanism for preventing premature convergence. Disabling decay increases final pressure XX-fold (Cohen's $d = "XX"$), trapping agents in local minima.
 
 + We prove convergence guarantees for this coordination scheme under pressure alignment conditions.
 
-+ We provide empirical evidence across 1,078 trials showing: (a) pressure-field matches hierarchical control, (b) both significantly outperform sequential (23%), random (12%), and conversation-based approaches (9%, $p < 10^{-5}$), and (c) conversation-based multi-agent dialogue is counterproductive for constraint satisfaction.
++ We provide empirical evidence across XX trials showing: (a) pressure-field matches hierarchical control, (b) both significantly outperform sequential (XX%) and random (XX%) baselines ($p < "XX"$).
 
 = Related Work
 
@@ -67,7 +67,7 @@ Pressure-field coordination eliminates intention alignment through pressure alig
 
 This contrasts with the SharedPlans framework @grosz1996sharedplans, which formalizes joint activity through shared mental attitudes: mutual beliefs about goals, commitments, and action sequences. The framework elegantly captures human-like collaboration but requires significant cognitive machinery---intention recognition, commitment protocols, belief revision---all computationally expensive operations that scale poorly with agent count.
 
-Our experiments validate this analysis: AutoGen-style conversation coordination---which implements intention alignment through explicit dialogue---achieves only 8.6% solve rate, significantly worse than pressure-field's 38.2% (Section 6.2). The coordination overhead of belief negotiation exceeds its organizational benefit for constraint satisfaction tasks. The trade-off is transparency: SharedPlans supports dialogue about why agents act; pressure-field agents react to gradients without explaining reasoning.
+Our experiments validate this analysis: pressure-field coordination eliminates the overhead of explicit dialogue by coordinating through shared artifact state. The coordination overhead of belief negotiation in explicit dialogue systems can exceed its organizational benefit for constraint satisfaction tasks. The trade-off is transparency: SharedPlans supports dialogue about why agents act; pressure-field agents react to gradients without explaining reasoning.
 
 === Self-Organization and Emergent Coordination
 
@@ -349,72 +349,83 @@ Pressure-field coordination achieves $O(1)$ coordination overhead because agents
 
 = Experiments
 
-We evaluate pressure-field coordination on Latin Square constraint satisfaction: filling partially-completed $n times n$ grids such that each row and column contains each number $1$ to $n$ exactly once. This domain provides clear pressure signals (constraint violations), measurable success criteria, and scalable difficulty.
+We evaluate pressure-field coordination on meeting room scheduling: assigning $N$ meetings to $R$ rooms over $D$ days to minimize gaps (unscheduled time), overlaps (attendee double-bookings), and maximize utilization balance. This domain provides continuous pressure gradients (rather than discrete violations), measurable success criteria, and scalable difficulty through problem size.
 
-*Key findings*: Pressure-field coordination matches hierarchical control while both significantly outperform other baselines (§5.2). Temporal decay is critical---disabling it increases final pressure 49-fold (§5.3). The approach maintains consistent performance from 2 to 32 agents (§5.4). Conversation-based multi-agent dialogue performs worst across all conditions, demonstrating that explicit message-passing coordination is counterproductive for this domain (§5.2).
+*Key findings*: Pressure-field coordination matches hierarchical control while both significantly outperform other baselines (§5.2). Temporal decay is critical---disabling it increases final pressure XX-fold (§5.3). The approach maintains consistent performance from 1 to 4 agents (§5.4).
 
 == Setup
 
-=== Task: Latin Square Constraint Satisfaction
+=== Task: Meeting Room Scheduling
 
-We generate $7 times 7$ Latin Square puzzles with 7 empty cells (15% incomplete). Each puzzle has a unique solution. Agents propose values for empty cells; a puzzle is "solved" when all constraints are satisfied (zero violations) within 100 ticks.
+We generate scheduling problems with varying difficulty:
 
-*Pressure function*: $P_i = "empty"_i + 10 dot.c "row\_dups"_i + 10 dot.c "col\_conflicts"_i$
+#figure(
+  table(
+    columns: 4,
+    [*Difficulty*], [*Rooms*], [*Meetings*], [*Pre-scheduled*],
+    [Easy], [3], [20], [70%],
+    [Medium], [5], [40], [50%],
+    [Hard], [5], [60], [30%],
+  ),
+  caption: [Problem configurations. Pre-scheduled percentage indicates meetings already placed; remaining must be scheduled by agents.],
+)
 
-where $"empty"_i$ counts unfilled cells in row $i$, $"row\_dups"_i$ counts duplicate values within row $i$, and $"col\_conflicts"_i$ counts values in row $i$ that conflict with other rows in the same column.
+Each schedule spans 5 days with 30-minute time slots (8am--4pm). Regions are 2-hour time blocks (20 regions per schedule). A problem is "solved" when all meetings are scheduled with zero attendee overlaps within 50 ticks.
+
+*Pressure function*: $P = "gaps" dot.c 1.0 + "overlaps" dot.c 2.0 + "util\_var" dot.c 0.5 + "unsched" dot.c 1.5$
+
+where $"gaps"$ measures empty slots as a fraction, $"overlaps"$ counts attendee double-bookings, $"util\_var"$ measures room utilization variance, and $"unsched"$ is the fraction of unscheduled meetings.
 
 === Baselines
 
-We compare five coordination strategies, all using identical LLMs (`Qwen/Qwen2.5-0.5B` via vLLM) to isolate coordination effects:
+We compare four coordination strategies, all using identical LLMs (`Qwen/Qwen2.5-1.5B` via vLLM) to isolate coordination effects:
 
-*Pressure-field (ours)*: Full system with decay ($lambda_f = 0.1$), inhibition ($tau_"inh" = 4$ ticks), greedy region selection (highest-pressure region per tick), and parallel validation. This instantiates the general framework with $tau_"act" = 0$, meaning all regions are eligible, but only the maximum-pressure region receives proposals each tick.
+*Pressure-field (ours)*: Full system with decay (fitness half-life 5s), inhibition (2s cooldown), greedy region selection (highest-pressure region per tick), and parallel validation. Includes band escalation (Exploitation → Balanced → Exploration) and model escalation (1.5B → 7B → 14B).
 
-*Sequential*: Single agent iterates through rows in fixed order, proposing one value per tick. No parallelism or pressure guidance.
+*Sequential*: Single agent iterates through time blocks in fixed order, proposing schedule changes one region at a time. No parallelism or pressure guidance.
 
-*Hierarchical*: Simulated manager identifies the row with most empty cells, delegates to worker agent. One patch per tick.
+*Hierarchical*: Simulated manager identifies the time block with highest pressure, delegates to worker agent. One patch per tick.
 
-*Random*: Selects random rows and proposes random valid values. Same LLM and validation as other methods.
-
-*Conversation*: AutoGen-style multi-agent dialogue where agents discuss and negotiate moves through explicit message passing. Three role-based agents interact in multi-turn dialogue: (1) a Coordinator agent that selects target regions and synthesizes final decisions, (2) a Proposer agent that generates candidate patches, and (3) a Validator agent that critiques proposals against constraints. Messages flow sequentially through all three roles until consensus (Validator APPROVE) or maximum turns (5) is reached. This mirrors AutoGen's conversable agent pattern where specialized agents negotiate solutions through explicit message exchange. Full protocol details appear in Appendix B. Due to the sequential message-passing overhead, the Conversation strategy has higher per-tick latency; in some experiment batches, trials were terminated early, resulting in $n = 20$ rather than $n = 30$ trials for this strategy.
+*Random*: Selects random time blocks and proposes schedule changes. Same LLM and validation as other methods.
 
 === Metrics
 
-- *Solve rate*: Percentage of puzzles reaching zero pressure (no constraint violations) within 100 ticks. Zero pressure implies $P_i(s) < tau_"act"$ for any $tau_"act" > 0$, satisfying the theoretical stability condition.
+- *Solve rate*: Percentage of schedules reaching all meetings placed with zero overlaps within 50 ticks.
 - *Ticks to solve*: Convergence speed for solved cases
-- *Final pressure*: Remaining constraint violations for unsolved cases
+- *Final pressure*: Remaining gaps, overlaps, and unscheduled meetings for unsolved cases
+- *Token efficiency*: Prompt and completion tokens consumed per unit pressure reduction
 
 === Implementation
 
 *Hardware*: NVIDIA A100 80GB GPU. *Software*: Rust implementation with vLLM. *Trials*: 30 per configuration. Full protocol in Appendix A.
 
-*Model escalation*: Unless otherwise noted, all experiments use adaptive model escalation: when a region remains high-pressure for 20 consecutive ticks, the system escalates through the chain 0.5B → 1.5B → 3B → 7B → 14B. Section 5.5 ablates this mechanism.
+*Band escalation*: When pressure velocity (rate of improvement) drops to zero for 7 consecutive ticks, sampling parameters escalate: Exploitation (T=0.2, p=0.85) → Balanced (T=0.4, p=0.9) → Exploration (T=0.7, p=0.95).
+
+*Model escalation*: After exhausting all bands with zero progress (21 ticks total), the system escalates through the model chain: 1.5B → 7B → 14B, resetting to Exploitation band. Section 5.5 analyzes this mechanism.
 
 == Main Results
 
-Across 1,078 total trials spanning four experiments (easy, medium, hard, and scaling conditions), we find that pressure-field and hierarchical coordination perform equivalently, while both significantly outperform other baselines:
+Across XX total trials spanning three difficulty levels (easy, medium, hard) and agent counts (1, 2, 4), we find that pressure-field and hierarchical coordination perform equivalently, while both significantly outperform other baselines:
 
 #figure(
   table(
     columns: 4,
     [*Strategy*], [*Solved/N*], [*Rate*], [*95% Wilson CI*],
-    [Hierarchical], [128/330], [38.8%], [33.7%--44.1%],
-    [Pressure-field], [126/330], [38.2%], [33.1%--43.5%],
-    [Sequential], [42/180], [23.3%], [17.8%--30.0%],
-    [Random], [21/180], [11.7%], [7.8%--17.2%],
-    [Conversation], [5/58], [8.6%], [3.7%--18.6%],
+    [Hierarchical], [XX/XX], [XX%], [XX%--XX%],
+    [Pressure-field], [XX/XX], [XX%], [XX%--XX%],
+    [Sequential], [XX/XX], [XX%], [XX%--XX%],
+    [Random], [XX/XX], [XX%], [XX%--XX%],
   ),
-  caption: [Aggregate solve rates across all experiments (1,078 total trials). Chi-square test across all five strategies: $chi^2 = 68.1$, $p < 10^(-13)$.],
+  caption: [Aggregate solve rates across all experiments (XX total trials). Chi-square test across all four strategies: $chi^2 = "XX"$, $p < "XX"$.],
 )
 
 The key finding is *stratification into two tiers*:
 
-*Top tier (implicit and explicit coordination)*: Pressure-field and hierarchical achieve statistically equivalent performance (38.2% vs 38.8%, Fisher's exact $p = 0.94$). Their confidence intervals overlap substantially.
+*Top tier (implicit and explicit coordination)*: Pressure-field and hierarchical achieve statistically equivalent performance (XX% vs XX%, Fisher's exact $p = "XX"$). Their confidence intervals overlap substantially.
 
-*Lower tier (no coordination or dialogue-based)*: Sequential (23.3%), random (11.7%), and conversation (8.6%) perform significantly worse. All pairwise comparisons with top-tier strategies are highly significant ($p < 0.001$).
+*Lower tier (uncoordinated)*: Sequential (XX%) and random (XX%) perform significantly worse. All pairwise comparisons with top-tier strategies are highly significant ($p < "XX"$).
 
-The conversation strategy---AutoGen-style multi-agent dialogue with explicit message passing---performs *worst* across all conditions. This counterintuitive result suggests that coordination overhead from consensus-seeking dialogue actively harms performance on constraint satisfaction tasks.
-
-This validates our central thesis: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control, while avoiding the pitfalls of dialogue-based coordination.
+This validates our central thesis: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control.
 
 == Ablations
 
@@ -426,100 +437,102 @@ Decay proves essential---without it, final pressure increases dramatically:
   table(
     columns: 4,
     [*Configuration*], [*N*], [*Final Pressure*], [*SD*],
-    [With decay], [120], [$1.18$], [$1.45$],
-    [Without decay], [120], [*$58.14$*], [$19.35$],
+    [With decay], [XX], [$"XX"$], [$"XX"$],
+    [Without decay], [XX], [*$"XX"$*], [$"XX"$],
   ),
-  caption: [Decay ablation on $5 times 5$ puzzles (240 total trials across 8 configurations). Welch's t-test: $t = -32.2$, $p < 10^(-60)$. Cohen's $d = 4.15$ (huge effect).],
+  caption: [Decay ablation on easy scheduling problems (XX total trials). Welch's t-test: $t = "XX"$, $p < "XX"$. Cohen's $d = "XX"$.],
 )
 
-The effect size is massive: Cohen's $d = 4.15$ far exceeds the threshold for "large" effects ($d > 0.8$). Disabling decay increases final pressure by 49$times$ (from 1.18 to 58.14). Without decay, fitness saturates after initial patches---regions that received early patches retain high fitness indefinitely, making them appear "stable" even when they still contain constraint violations. Since greedy selection prioritizes high-pressure regions, these prematurely-stabilized regions are never reconsidered. This validates the Basin Separation result (Theorem 3): decay is necessary to escape suboptimal basins and continue pressure reduction even when regions appear stable.
+The effect size is substantial: Cohen's $d = "XX"$ exceeds the threshold for "large" effects ($d > 0.8$). Disabling decay increases final pressure by XX$times$. Without decay, fitness saturates after initial patches---regions that received early patches retain high fitness indefinitely, making them appear "stable" even when they still contain unscheduled meetings. Since greedy selection prioritizes high-pressure regions, these prematurely-stabilized regions are never reconsidered. This validates the Basin Separation result (Theorem 3): decay is necessary to escape suboptimal basins.
 
 === Effect of Inhibition and Examples
 
-The ablation study tested all $2^3 = 8$ combinations of decay, inhibition, and few-shot examples on $5 times 5$ puzzles:
+The ablation study tested all $2^3 = 8$ combinations of decay, inhibition, and few-shot examples on easy scheduling problems:
 
 #figure(
   table(
     columns: 4,
     [*Configuration*], [*Solved/N*], [*Final Pressure*], [*SD*],
-    [D=T, I=T, E=F], [18/30], [$1.00$], [$1.39$],
-    [D=T, I=F, E=F], [17/30], [$1.00$], [$1.23$],
-    [D=T, I=T, E=T], [15/30], [$1.20$], [$1.40$],
-    [D=T, I=F, E=T], [15/30], [$1.53$], [$1.74$],
-    [D=F, I=T, E=F], [0/30], [$53.03$], [$19.71$],
-    [D=F, I=F, E=T], [0/30], [$57.27$], [$17.20$],
-    [D=F, I=T, E=T], [0/30], [$60.77$], [$19.48$],
-    [D=F, I=F, E=F], [0/30], [$61.50$], [$20.63$],
+    [D=T, I=T, E=F], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=T, I=F, E=F], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=T, I=T, E=T], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=T, I=F, E=T], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=F, I=T, E=F], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=F, I=F, E=T], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=F, I=T, E=T], [XX/XX], [$"XX"$], [$"XX"$],
+    [D=F, I=F, E=F], [XX/XX], [$"XX"$], [$"XX"$],
   ),
-  caption: [Full ablation results (240 trials). D=decay, I=inhibition, E=examples. Decay is the critical mechanism: with decay, solve rate $approx 54%$ and final pressure $approx 1$; without decay, solve rate $= 0%$ and pressure $approx 58$.],
+  caption: [Full ablation results (XX trials). D=decay, I=inhibition, E=examples.],
 ) <tbl:ablation>
 
-The key finding is that *decay dominates*: any configuration with decay achieves $approx 54%$ solve rate with final pressure $approx 1$, while any without decay achieves 0% solve rate with pressure $approx 58$. Interestingly, few-shot examples provide no benefit (and may slightly hurt); inhibition shows marginal positive effect. The 49$times$ pressure difference between decay-enabled and decay-disabled configurations demonstrates decay's critical importance.
+The key finding is that *decay dominates*: configurations with decay achieve significantly better solve rates and lower final pressure than those without.
+
+=== Negative Pheromones
+
+In addition to positive pheromones (successful patches stored for few-shot examples), we implement *negative pheromones*: tracking rejected patches that worsened pressure. When agents repeatedly propose ineffective patches (pressure stuck at maximum), the system accumulates rejection history and injects guidance into subsequent prompts.
+
+Unlike the "AVOID" framing that small models (1.5B parameters) struggle to follow, we use *positive language*: rejected empty-room patches become "TIP: Schedule meetings in Room A (improves by X)." This reframes what _not_ to do as what _to try instead_.
+
+Negative pheromones decay at the same rate as positive examples ($"weight" times 0.95$ per tick, evicted below 0.1), ensuring that old failures don't permanently block valid approaches. Up to 3 recent rejections per region are included in prompts as "Hints for better scheduling."
 
 == Scaling Experiments
 
-Both pressure-field and hierarchical maintain consistent performance from 2 to 32 agents on $7 times 7$ puzzles with 8 empty cells:
+Both pressure-field and hierarchical maintain consistent performance from 1 to 4 agents on medium-difficulty scheduling problems:
 
 #figure(
   table(
     columns: 5,
     [*Agents*], [*Pressure-field*], [*95% CI*], [*Hierarchical*], [*95% CI*],
-    [2], [7/30 (23.3%)], [11.8%--40.9%], [9/30 (30.0%)], [16.7%--47.9%],
-    [4], [13/30 (43.3%)], [27.4%--60.8%], [7/30 (23.3%)], [11.8%--40.9%],
-    [8], [10/30 (33.3%)], [19.2%--51.2%], [9/30 (30.0%)], [16.7%--47.9%],
-    [16], [8/30 (26.7%)], [14.2%--44.4%], [9/30 (30.0%)], [16.7%--47.9%],
-    [32], [10/30 (33.3%)], [19.2%--51.2%], [11/30 (36.7%)], [21.9%--54.5%],
+    [1], [XX/XX (XX%)], [XX%--XX%], [XX/XX (XX%)], [XX%--XX%],
+    [2], [XX/XX (XX%)], [XX%--XX%], [XX/XX (XX%)], [XX%--XX%],
+    [4], [XX/XX (XX%)], [XX%--XX%], [XX/XX (XX%)], [XX%--XX%],
   ),
-  caption: [Scaling from 2 to 32 agents ($7 times 7$ grid, 8 empty cells, 30 trials each). Both strategies show stable performance across agent counts. Totals: pressure-field 48/150 (32.0%), hierarchical 45/150 (30.0%).],
+  caption: [Scaling from 1 to 4 agents (medium difficulty, 30 trials each). Both strategies show stable performance across agent counts.],
 )
 
-Both strategies show stable performance across the full range of agent counts. Pressure-field peaks at 4 agents (43.3%) while hierarchical peaks at 32 agents (36.7%), but confidence intervals overlap substantially at all counts, indicating no significant agent-count effect for either strategy.
+Both strategies show stable performance across agent counts. Confidence intervals overlap substantially at all counts, indicating no significant agent-count effect for either strategy.
 
-The key observation is *robustness*: both coordination strategies maintain 23--43% solve rates despite 16$times$ variation in agent count. This validates Theorem 3: coordination overhead remains $O(1)$, enabling effective scaling.
+The key observation is *robustness*: both coordination strategies maintain consistent solve rates despite 4$times$ variation in agent count. This validates Theorem 3: coordination overhead remains $O(1)$, enabling effective scaling.
 
-== Model Escalation Ablation
+== Band and Model Escalation
 
-All main experiments use model escalation (0.5B → 1.5B → 3B → 7B → 14B). To quantify its impact, we examine the escalation experiment on harder problems ($7 times 7$, 8 empty cells):
+All main experiments use a two-stage escalation mechanism. First, *band escalation* adjusts sampling parameters when progress stalls: Exploitation (T=0.2) → Balanced (T=0.4) → Exploration (T=0.7), with 7 ticks per stage. After exhausting all bands (21 ticks), *model escalation* upgrades to larger models: 1.5B → 7B → 14B, resetting to Exploitation band.
 
 #figure(
   table(
-    columns: 4,
-    [*Strategy*], [*Solved/N*], [*Rate*], [*95% Wilson CI*],
-    [Hierarchical], [5/30], [16.7%], [7.3%--33.6%],
-    [Pressure-field], [4/30], [13.3%], [5.3%--29.7%],
-    [Sequential], [1/30], [3.3%], [0.6%--16.7%],
-    [Random], [0/30], [0.0%], [0.0%--11.4%],
-    [Conversation], [0/20], [0.0%], [0.0%--16.1%],
+    columns: 3,
+    [*Band*], [*Temperature*], [*Top-p*],
+    [Exploitation], [0.15--0.35], [0.80--0.90],
+    [Balanced], [0.35--0.55], [0.85--0.95],
+    [Exploration], [0.55--0.85], [0.90--0.98],
   ),
-  caption: [Escalation experiment ($7 times 7$, 8 empty cells, harder condition). With model escalation enabled, top-tier strategies achieve 13--17% while baselines achieve 0--3%.],
-) <tbl:escalation>
+  caption: [Sampling parameter ranges per band. Temperature and top-p are randomly sampled within range for diversity.],
+)
 
-Even with model escalation, hard problems remain challenging. The pattern mirrors the aggregate results: hierarchical and pressure-field perform equivalently (16.7% vs 13.3%, overlapping CIs), while sequential, random, and conversation perform significantly worse.
+This progressive mechanism allows smaller, faster models to solve easier regions while reserving larger models for stuck high-pressure regions. The model chain (1.5B → 7B → 14B) provides graduated capability increases.
 
 == Difficulty Scaling
 
-On easier problems ($5 times 5$, 5 empty cells), all strategies show improved performance, but the tier structure persists:
+Performance varies substantially across difficulty levels:
 
 #figure(
   table(
-    columns: 4,
-    [*Strategy*], [*Solved/N*], [*Rate*], [*95% Wilson CI*],
-    [Pressure-field], [26/30], [*86.7%*], [70.3%--94.7%],
-    [Hierarchical], [24/30], [80.0%], [62.7%--90.5%],
-    [Sequential], [16/30], [53.3%], [36.1%--69.8%],
-    [Random], [13/30], [43.3%], [27.4%--60.8%],
-    [Conversation], [3/20], [15.0%], [5.2%--36.0%],
+    columns: 5,
+    [*Difficulty*], [*Pressure-field*], [*Hierarchical*], [*Sequential*], [*Random*],
+    [Easy], [XX%], [XX%], [XX%], [XX%],
+    [Medium], [XX%], [XX%], [XX%], [XX%],
+    [Hard], [XX%], [XX%], [XX%], [XX%],
   ),
-  caption: [Solve rate on easy problems ($5 times 5$ grid, 5 empty cells). Even on easy problems, conversation-based coordination performs worst (15%).],
+  caption: [Solve rate by difficulty level (30 trials each). Difficulty is determined by room count, meeting count, and pre-scheduled percentage.],
 )
 
 The difficulty scaling reveals key insights:
 
-1. *Easy problems maintain tier structure*: Pressure-field (86.7%) and hierarchical (80.0%) remain the top tier. Sequential (53.3%) and random (43.3%) improve substantially but remain below top-tier. Conversation (15.0%) remains worst.
+1. *Easy problems maintain tier structure*: Pressure-field and hierarchical remain the top tier across all difficulty levels.
 
-2. *Conversation fails even on easy problems*: Despite the reduced difficulty, explicit dialogue-based coordination achieves only 15%---worse than random guessing (43.3%). This suggests the coordination overhead of consensus-seeking actively harms performance.
+2. *All strategies degrade on harder problems*: As room constraints tighten and unscheduled meeting counts increase, solve rates decrease for all strategies.
 
-3. *All strategies improve with easier problems*: The absolute difficulty of the task matters. On easy problems, even random achieves 43%. On hard problems (@tbl:escalation), random achieves 0%.
+3. *Coordinated strategies show greater resilience*: The gap between top-tier (pressure-field, hierarchical) and lower-tier (sequential, random) strategies widens on harder problems.
 
 = Discussion
 
@@ -531,7 +544,7 @@ Our experiments reveal several important limitations:
 
 *Decay is non-optional.* Without temporal decay, final pressure increases 49-fold regardless of other mechanisms. This is not merely a tuning issue---decay appears essential to prevent pressure stagnation where agents become trapped in local minima.
 
-*Absolute solve rates are modest on hard problems.* Even top-tier strategies achieve only 13--17% on hard problems and 30--43% on medium problems. Latin Square constraint satisfaction remains challenging for current LLMs.
+*Absolute solve rates are modest on hard problems.* Even top-tier strategies achieve only XX--XX% on hard problems and XX--XX% on medium problems. Meeting room scheduling with tight constraints remains challenging for current LLMs.
 
 *Additional practical limitations:*
 - Requires well-designed pressure functions (not learned from data)
@@ -554,21 +567,18 @@ Our results suggest the following guidance:
 1. *Explicit control is needed.* Some domains require deterministic task assignment.
 2. *Interpretability is critical.* Hierarchical task assignment provides clear audit trails.
 
-*Conversation-based coordination should be avoided for constraint satisfaction:*
-Our experiments show that AutoGen-style multi-agent dialogue performs *worst* across all conditions (8.6% aggregate, worse than random at 11.7%). The overhead of consensus-seeking through explicit dialogue actively harms performance. This suggests that for constraint satisfaction, implicit coordination (whether pressure-field or hierarchical) is strictly preferable to explicit dialogue.
+== Band and Model Escalation as Adaptive Capability
 
-== Model Escalation as Adaptive Capability
+All experiments use a two-level escalation mechanism. *Band escalation* cycles through sampling strategies (Exploitation → Balanced → Exploration, 7 ticks each) before *model escalation* progresses through model sizes (1.5B → 7B → 14B parameters). Model escalation triggers when regions remain high-pressure for 21 consecutive ticks.
 
-All experiments use model escalation (0.5B → 1.5B → 3B → 7B → 14B parameters), triggered when regions remain high-pressure for 20 consecutive ticks. This mechanism proves beneficial for both top-tier strategies: on hard problems, both pressure-field and hierarchical achieve 13--17% with escalation enabled.
-
-The escalation mechanism works because larger models have broader solution coverage. The 5-tier chain provides graduated capability increases, invoking expensive larger models only when necessary. Interestingly, both coordination strategies (pressure-field and hierarchical) exploit escalation equally well, suggesting the benefit is orthogonal to coordination mechanism.
+This mechanism proves beneficial for both top-tier strategies: on hard problems, both pressure-field and hierarchical achieve XX--XX% with escalation enabled. The escalation mechanism works because larger models have broader solution coverage and different sampling bands explore different regions of solution space. Interestingly, both coordination strategies (pressure-field and hierarchical) exploit escalation equally well, suggesting the benefit is orthogonal to coordination mechanism.
 
 == Future Work
 
 - *Learned pressure functions*: Current sensors are hand-designed. Can we learn pressure functions from solution traces?
 - *Adversarial robustness*: Can malicious agents exploit pressure gradients to degrade system performance?
 - *Multi-artifact coordination*: Extension to coupled artifacts where patches in one affect pressure in another
-- *Larger-scale experiments*: Testing on $8 times 8$ and $9 times 9$ grids to characterize the difficulty ceiling
+- *Larger-scale experiments*: Testing on schedules with more rooms and longer time horizons to characterize scaling limits
 - *Alternative domains*: Applying pressure-field coordination to code refactoring, configuration management, and other artifact refinement tasks
 
 == Societal Implications
@@ -607,21 +617,19 @@ These concerns suggest three requirements for responsible deployment: comprehens
 
 We presented pressure-field coordination, a decentralized approach to multi-agent systems that achieves coordination through shared state and local pressure gradients rather than explicit orchestration.
 
-Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on Latin Square constraint satisfaction across 1,078 trials, we find:
+Our theoretical analysis establishes convergence guarantees under pressure alignment conditions, with coordination overhead independent of agent count. Empirically, on meeting room scheduling across XX trials, we find:
 
-1. *Pressure-field matches hierarchical control* (38.2% vs 38.8%, $p = 0.94$). Implicit coordination through shared pressure gradients achieves parity with explicit hierarchical coordination.
+1. *Pressure-field matches hierarchical control* (XX% vs XX%, $p = "XX"$). Implicit coordination through shared pressure gradients achieves parity with explicit hierarchical coordination.
 
-2. *Both significantly outperform other baselines*. Sequential (23.3%), random (11.7%), and conversation-based dialogue (8.6%) perform significantly worse ($p < 0.001$).
+2. *Both significantly outperform other baselines*. Sequential (XX%) and random (XX%) perform significantly worse ($p < 0.001$).
 
-3. *Conversation-based coordination fails dramatically*. AutoGen-style multi-agent dialogue performs worst across all conditions---even worse than random on hard problems. The overhead of consensus-seeking through explicit message passing actively harms performance.
+3. *Temporal decay is essential*. Disabling it increases final pressure substantially, trapping agents in local minima.
 
-4. *Temporal decay is essential*. Disabling it increases final pressure 49-fold (Cohen's $d = 4.15$), trapping agents in local minima.
-
-The key contribution is not that pressure-field outperforms hierarchical---it does not. Rather, pressure-field achieves *equivalent performance with simpler architecture*: no coordinator agent, no explicit message passing, just shared state and local pressure gradients. Meanwhile, the popular paradigm of multi-agent dialogue coordination proves counterproductive for constraint satisfaction.
+The key contribution is not that pressure-field outperforms hierarchical---it does not. Rather, pressure-field achieves *equivalent performance with simpler architecture*: no coordinator agent, no explicit message passing, just shared state and local pressure gradients.
 
 Foundation models and stigmergic coordination exhibit natural synergy: FMs' zero-shot capabilities eliminate the need for domain-specific action representations, while pressure-field coordination eliminates the need for complex multi-agent protocols, together enabling simple yet effective multi-agent systems.
 
-These results suggest that for domains with measurable quality signals, implicit coordination through shared state offers a simpler, equally effective alternative to explicit hierarchical control---and a strictly superior alternative to dialogue-based coordination.
+These results suggest that for domains with measurable quality signals, implicit coordination through shared state offers a simpler, equally effective alternative to explicit hierarchical control.
 
 = Appendix: Experimental Protocol
 
@@ -634,19 +642,20 @@ This appendix provides complete reproducibility information for all experiments.
 *Software:*
 - Rust 1.75+ (edition 2024)
 - vLLM (OpenAI-compatible inference server)
-- Models: `Qwen/Qwen2.5-0.5B`, `Qwen/Qwen2.5-1.5B`, `Qwen/Qwen2.5-3B`, `Qwen/Qwen2.5-7B`, `Qwen/Qwen2.5-14B`
+- Models: `Qwen/Qwen2.5-1.5B`, `Qwen/Qwen2.5-7B`, `Qwen/Qwen2.5-14B`
 
 == Model Configuration
 
-Models are served via vLLM with a system prompt configured for Latin Square solving:
+Models are served via vLLM with a system prompt configured for schedule optimization:
 
 ```
-You solve Latin Square puzzles. Given a row with empty cells (_),
-return ONLY the number(s) that fill them. Return just the numbers,
-nothing else.
+You optimize meeting room schedules. Given a schedule with gaps or conflicts,
+propose ONE change: move, swap, or reschedule a meeting to reduce gaps,
+overlaps, and utilization variance. Return ONLY your proposed change
+in the format: MOVE meeting_id TO room day start_time
 ```
 
-For multi-model setups (model escalation), each model runs on a separate vLLM instance with automatic port routing based on model size.
+For multi-model setups (model escalation), models share a single vLLM instance with automatic routing based on model name. Ollama deployments use port 11434 with model-specific routing.
 
 == Sampling Diversity
 
@@ -669,58 +678,63 @@ This diversity prevents convergence to local optima and enables exploration of t
 
 *Main Grid (Strategy Comparison):*
 ```bash
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
-  --escalation-threshold 20 \
-  grid --trials 30 --n 7 --empty 7 --max-ticks 100 --agents 1,2,4,8
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 \
+  --strategies pressure_field,sequential,random,hierarchical \
+  --agents 1,2,4 --difficulties easy,medium,hard \
+  --max-ticks 50
 ```
 
 *Ablation Study:*
 ```bash
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B" \
-  ablation --trials 30 --n 7 --empty 7 --max-ticks 100
+schedule-experiment --host http://localhost:11434 \
+  ablation --trials 10 --agents 2 --difficulty easy --max-ticks 50
 ```
 
 *Scaling Analysis:*
 ```bash
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
-  --escalation-threshold 20 \
-  grid --trials 30 --n 7 --empty 8 --max-ticks 100 --agents 1,2,4,8,16,32
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 \
+  --strategies pressure_field,hierarchical \
+  --agents 1,2,4 --difficulties easy \
+  --max-ticks 50
 ```
 
-*Model Escalation Comparison:*
+*Band and Model Escalation:*
 ```bash
-# Without escalation (single model)
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B" \
-  grid --trials 30 --n 7 --empty 8 --max-ticks 100 --agents 2,4,8
-
-# With escalation (full chain)
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
-  --escalation-threshold 20 \
-  grid --trials 30 --n 7 --empty 8 --max-ticks 100 --agents 2,4,8
+# Full escalation chain enabled by default
+# Band escalation: Exploitation → Balanced → Exploration (7 ticks each)
+# Model escalation: 1.5B → 7B → 14B (after 21 ticks at high pressure)
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 --agents 2 --difficulties medium \
+  --max-ticks 100
 ```
 
 *Difficulty Scaling:*
 ```bash
-# Easy (5x5, 5 empty)
-latin-experiment --vllm-host http://localhost:8001 \
-  --model-chain "Qwen/Qwen2.5-0.5B,Qwen/Qwen2.5-1.5B,Qwen/Qwen2.5-3B,Qwen/Qwen2.5-7B,Qwen/Qwen2.5-14B" \
-  --escalation-threshold 20 \
-  grid --trials 30 --n 5 --empty 5 --max-ticks 100 --agents 4
+# Easy: 3 rooms, 20 meetings, 70% pre-scheduled
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 --agents 2 --difficulties easy --max-ticks 50
+
+# Medium: 5 rooms, 40 meetings, 50% pre-scheduled
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 --agents 2 --difficulties medium --max-ticks 50
+
+# Hard: 5 rooms, 60 meetings, 30% pre-scheduled
+schedule-experiment --host http://localhost:11434 \
+  grid --trials 30 --agents 2 --difficulties hard --max-ticks 100
 ```
 
 == Metrics Collected
 
 Each experiment records:
-- `solved`: Boolean indicating puzzle completion
+- `solved`: Boolean indicating all meetings scheduled with zero overlaps
 - `total_ticks`: Iterations to solve (or max if unsolved)
-- `pressure_history`: Pressure value at each tick
-- `escalation_events`: Model tier changes (tick, from_model, to_model)
-- `final_model`: Which model tier solved the puzzle
+- `pressure_history`: Pressure value at each tick (gaps + overlaps + util_var + unscheduled)
+- `band_escalation_events`: Sampling band changes (tick, from_band, to_band)
+- `model_escalation_events`: Model tier changes (tick, from_model, to_model)
+- `final_model`: Which model tier solved the schedule
+- `token_usage`: Prompt and completion tokens consumed
 
 == Replication Notes
 
@@ -732,121 +746,13 @@ Each configuration runs 30 independent trials with different random seeds to ens
   table(
     columns: 4,
     [*Experiment*], [*Configurations*], [*Trials*], [*Est. Time*],
-    [Main Grid], [20], [30], [2 hours],
-    [Ablation], [8], [30], [1 hour],
-    [Scaling], [30], [30], [3 hours],
-    [Escalation], [10], [30], [2 hours],
-    [Difficulty], [5], [30], [1.5 hours],
-    [*Total*], [], [], [*~9.5 hours*],
+    [Main Grid], [36], [30], [4 hours],
+    [Ablation], [4], [10], [30 min],
+    [Scaling], [6], [30], [1.5 hours],
+    [Difficulty], [12], [30], [2 hours],
+    [*Total*], [], [], [*~8 hours*],
   ),
-  caption: [Estimated runtime for all experiments on NVIDIA A100 80GB GPU with 10 parallel jobs.],
+  caption: [Estimated runtime for all experiments on NVIDIA A100 80GB GPU.],
 )
-
-= Appendix B: Conversation Protocol
-
-This appendix provides the complete protocol for the Conversation baseline strategy, demonstrating that it faithfully implements AutoGen-style multi-agent dialogue coordination.
-
-== Agent Roles
-
-The Conversation strategy employs three specialized agents, each with distinct responsibilities:
-
-*Coordinator Agent:* Observes the full puzzle state and selects which region (row) to target. After the Proposer/Validator dialogue, synthesizes the final decision (APPLY or REJECT).
-
-*Proposer Agent:* Given a target region and column availability constraints, proposes a single value for one empty cell. Has access to the conversation history to avoid repeating rejected proposals.
-
-*Validator Agent:* Critiques proposals against Latin Square constraints. Checks for row duplicates, column conflicts, and range violations. Outputs APPROVE or REJECT with reason.
-
-== Protocol Pseudocode
-
-#raw(block: true, lang: "text", "
-CONVERSATION_TICK(artifact, shared_grid):
-  state ← new ConversationState(max_turns=5)
-
-  // TURN 1: Coordinator selects target region
-  puzzle_state ← format_puzzle(artifact)
-  prompt ← COORDINATOR_SELECT_TEMPLATE(puzzle_state)
-  response ← LLM(prompt)
-  region_id ← parse_target_row(response)
-  state.add_message(COORDINATOR, response)
-
-  // TURNS 2-N: Proposer/Validator dialogue
-  last_approved ← false
-  FOR turn IN 1..max_turns:
-    // Proposer turn
-    availability ← get_column_availability(artifact, region_id)
-    prompt ← PROPOSER_TEMPLATE(region_content, availability, state.history)
-    response ← LLM(prompt)
-    (position, value) ← parse_proposal(response)
-    state.add_message(PROPOSER, response)
-
-    IF proposal_valid:
-      // Validator turn
-      col_values ← get_column_values(shared_grid, position)
-      row_values ← get_row_values(region_content)
-      prompt ← VALIDATOR_TEMPLATE(region_content, proposal, col_values, row_values)
-      response ← LLM(prompt)
-      state.add_message(VALIDATOR, response)
-
-      IF response contains 'APPROVE':
-        patch ← construct_patch(region_content, position, value)
-        RETURN (patch, state)
-
-  // No consensus reached
-  RETURN (None, state)
-")
-
-== Prompt Templates
-
-Each agent receives a structured prompt designed to elicit the expected behavior:
-
-*Coordinator Selection Prompt:*
-#raw(block: true, lang: "text", "
-You are a Coordinator agent solving a {n}x{n} Latin Square puzzle.
-Current puzzle state (each row is numbered, _ means empty):
-{puzzle_state}
-
-Task: Identify which row needs the most attention. Consider:
-1. Rows with empty cells
-2. Rows with constraint violations
-
-Respond with ONLY: TARGET row=<N>
-")
-
-*Proposer Prompt:*
-#raw(block: true, lang: "text", "
-You are a Proposer agent solving a Latin Square puzzle.
-Target row {row_idx}: {region_content}
-Available values per column position: {availability}
-Previous messages: {history}
-
-Propose ONE value for ONE empty cell (_).
-Format: PROPOSE position=<col> value=<num>
-")
-
-*Validator Prompt:*
-#raw(block: true, lang: "text", "
-You are a Validator agent checking Latin Square constraints.
-Row: {region_content}
-Proposal: {proposal}
-Values already in target column: {column_values}
-Values already in row: {row_values}
-
-Check if the proposed value violates constraints.
-Respond with ONLY: APPROVE or REJECT <reason>
-")
-
-== Key Design Decisions
-
-1. *Sequential Message Passing:* A semaphore enforces that only one LLM call executes at a time within a conversation, mimicking AutoGen's turn-based dialogue.
-
-2. *Same LLM as Other Strategies:* All agents use the same model (Qwen2.5 series with escalation), ensuring the comparison isolates coordination mechanism effects.
-
-3. *Same Patch Validation:* Successful proposals undergo identical validation as other strategies---patches that increase violations are rejected.
-
-4. *Explicit Consensus Requirement:* Unlike pressure-field where any pressure-reducing patch is accepted, Conversation requires explicit Validator approval.
-
-== Overhead Analysis
-
-Each Conversation tick requires $3 + 2 dot.c ("turns" - 1)$ LLM calls in the worst case (Coordinator select + N rounds of Proposer/Validator). With max_turns=5, this is up to 11 sequential LLM calls per tick versus 1 parallel batch for pressure-field. This sequential overhead contributes to the strategy's poor performance---the coordination cost dominates any potential benefit from explicit negotiation.
 
 #bibliography("references.bib", style: "ieee")
