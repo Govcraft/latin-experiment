@@ -382,11 +382,11 @@ We compare four coordination strategies, all using identical LLMs (`Qwen/Qwen2.5
 
 *Pressure-field (ours)*: Full system with decay (fitness half-life 5s), inhibition (2s cooldown), greedy region selection (highest-pressure region per tick), and parallel validation. Includes band escalation (Exploitation → Balanced → Exploration) and model escalation (1.5B → 7B → 14B).
 
-*Sequential*: Single agent iterates through time blocks in fixed order, proposing schedule changes one region at a time. No parallelism or pressure guidance.
+*Sequential*: Single agent iterates through time blocks in fixed order, proposing schedule changes one region at a time. No parallelism, pressure guidance, or patch validation---applies any syntactically valid patch regardless of quality impact.
 
-*Hierarchical*: Simulated manager identifies the time block with highest pressure, delegates to worker agent. One patch per tick.
+*Hierarchical*: Simulated manager identifies the time block with highest pressure, delegates to worker agent. Validates patches before applying (only accepts pressure-reducing changes). One patch per tick. Represents centralized control with quality gating.
 
-*Random*: Selects random time blocks and proposes schedule changes. Same LLM and validation as other methods.
+*Random*: Selects random time blocks and proposes schedule changes. No patch validation---applies any syntactically valid patch regardless of quality impact.
 
 === Metrics
 
@@ -421,11 +421,11 @@ Across XX total trials spanning three difficulty levels (easy, medium, hard) and
 
 The key finding is *stratification into two tiers*:
 
-*Top tier (implicit and explicit coordination)*: Pressure-field and hierarchical achieve statistically equivalent performance (XX% vs XX%, Fisher's exact $p = "XX"$). Their confidence intervals overlap substantially.
+*Top tier (coordinated with validation)*: Pressure-field and hierarchical achieve statistically equivalent performance (XX% vs XX%, Fisher's exact $p = "XX"$). Both validate patches before applying, ensuring only pressure-reducing changes. Their confidence intervals overlap substantially.
 
-*Lower tier (uncoordinated)*: Sequential (XX%) and random (XX%) perform significantly worse. All pairwise comparisons with top-tier strategies are highly significant ($p < "XX"$).
+*Lower tier (uncoordinated, no validation)*: Sequential (XX%) and random (XX%) perform significantly worse. These strategies apply any syntactically valid patch without quality gating, allowing state degradation. All pairwise comparisons with top-tier strategies are highly significant ($p < "XX"$).
 
-This validates our central thesis: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control.
+This stratification isolates *coordination mechanism* as the experimental variable: top-tier strategies differ in coordination style (implicit vs explicit) but share quality gating, enabling fair comparison. The result validates our central thesis: implicit coordination through shared pressure gradients achieves parity with explicit hierarchical control.
 
 == Ablations
 
@@ -673,6 +673,23 @@ The experiment framework overrides default sampling parameters with three explor
 )
 
 This diversity prevents convergence to local optima and enables exploration of the solution space.
+
+== Problem Generation and Seeding
+
+Fair strategy comparison requires identical problem instances: each strategy must face the same scheduling challenge within a trial. We achieve this through deterministic seeding.
+
+Each trial generates its problem from a seed:
+
+$ "seed" = "trial" times 1000 + "agent_count" $
+
+Trial 5 with 2 agents yields seed 5002, producing identical meeting configurations whether evaluated with pressure-field, conversation, or hierarchical coordination.
+
+The seed governs all stochastic generation:
+- Meeting durations (1-4 time slots)
+- Attendee assignments (2-5 participants)
+- Room preferences and capacity requirements
+- Pre-scheduled vs. unassigned meeting distribution
+- Time slot availability patterns
 
 == Experiment Commands
 

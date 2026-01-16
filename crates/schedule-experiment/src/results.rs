@@ -196,6 +196,15 @@ pub struct ConfigSummary {
     pub avg_final_pressure: f64,
     pub min_ticks: usize,
     pub max_ticks: usize,
+    /// Solve rate by final model tier (model_name -> solve_rate)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub solve_rate_by_model: HashMap<String, f64>,
+    /// Average number of model escalations per trial
+    #[serde(default)]
+    pub avg_escalations: f64,
+    /// Distribution of escalation counts (num_escalations -> count)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub escalation_distribution: HashMap<usize, usize>,
 }
 
 impl GridResults {
@@ -266,6 +275,32 @@ impl GridResults {
             let avg_final_pressure =
                 results.iter().map(|r| r.final_pressure).sum::<f64>() / n;
 
+            // Model-tier analysis: solve rate by final model
+            let mut by_model: HashMap<String, (usize, usize)> = HashMap::new(); // (solved, total)
+            for r in &results {
+                let entry = by_model.entry(r.final_model.clone()).or_insert((0, 0));
+                if r.solved {
+                    entry.0 += 1;
+                }
+                entry.1 += 1;
+            }
+            let solve_rate_by_model: HashMap<String, f64> = by_model
+                .into_iter()
+                .map(|(model, (solved, total))| (model, solved as f64 / total as f64))
+                .collect();
+
+            // Average escalations per trial
+            let total_escalations: usize = results.iter().map(|r| r.escalation_events.len()).sum();
+            let avg_escalations = total_escalations as f64 / n;
+
+            // Escalation distribution (how many trials had 0, 1, 2, ... escalations)
+            let mut escalation_distribution: HashMap<usize, usize> = HashMap::new();
+            for r in &results {
+                *escalation_distribution
+                    .entry(r.escalation_events.len())
+                    .or_insert(0) += 1;
+            }
+
             self.summary.insert(
                 key.clone(),
                 ConfigSummary {
@@ -279,6 +314,9 @@ impl GridResults {
                     avg_final_pressure,
                     min_ticks,
                     max_ticks,
+                    solve_rate_by_model,
+                    avg_escalations,
+                    escalation_distribution,
                 },
             );
         }

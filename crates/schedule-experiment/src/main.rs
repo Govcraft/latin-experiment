@@ -49,7 +49,7 @@ enum Commands {
 
     /// Run a single experiment.
     Single {
-        /// Strategy: pressure_field, sequential, random, hierarchical
+        /// Strategy: pressure_field, conversation, sequential, random, hierarchical
         #[arg(short, long, default_value = "pressure_field")]
         strategy: String,
         /// Number of agents

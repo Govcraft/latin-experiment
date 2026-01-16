@@ -755,7 +755,17 @@ impl ExperimentRunner {
                     expected_delta: HashMap::new(),
                 };
 
-                if ctx.artifact.apply_patch(patch).is_ok() {
+                // Hierarchical validates patches (centralized control with quality check)
+                // Sequential/Random do not validate (uncoordinated controls)
+                let should_apply = match strategy {
+                    Strategy::Hierarchical => {
+                        let (should_accept, _delta) = ctx.artifact.evaluate_patch(&patch);
+                        should_accept
+                    }
+                    _ => true, // Sequential and Random apply unconditionally
+                };
+
+                if should_apply && ctx.artifact.apply_patch(patch).is_ok() {
                     // Update shared schedule
                     if let Ok(mut schedule) = ctx.shared_schedule.write() {
                         *schedule = ctx.artifact.schedule().clone();
@@ -1063,6 +1073,11 @@ impl ExperimentRunner {
         let ended_at = Utc::now();
         let final_pressure = pressure_history.last().copied().unwrap_or(0.0);
         let solved = baseline_ctx.artifact.is_solved();
+
+        // Log if max ticks reached without solving
+        if !solved && tick_count >= self.config.max_ticks {
+            info!(trial = ctx.trial, tick = tick_count, "Schedule unsolved! Max ticks reached");
+        }
 
         let example_bank_stats = {
             let bank = baseline_ctx.example_bank.read().await;
