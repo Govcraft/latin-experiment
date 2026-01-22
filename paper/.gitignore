@@ -1,0 +1,32 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+*-blx.bib
+
+# PDF output (uncomment if you want to ignore generated PDFs)
+# *.pdf
+
+# Editor backup files
+*~
+*.bak
+*.swp
+
+# macOS
+.DS_Store
+
+# Typst artifacts (legacy)
+*.typst.pdf
