@@ -22,7 +22,7 @@ use tracing::{debug, warn};
 
 use crate::artifact::LatinSquareArtifact;
 use crate::sensors::SharedGrid;
-use crate::vllm_client::VllmClient;
+use crate::vllm_client::{LlmResponse, VllmClient};
 
 /// Agent roles in the conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +66,10 @@ pub struct ConversationState {
     pub consensus_ticks: usize,
     /// Number of ticks completed
     pub total_ticks: usize,
+    /// Prompt tokens consumed in this tick's conversation
+    pub prompt_tokens: u32,
+    /// Completion tokens generated in this tick's conversation
+    pub completion_tokens: u32,
 }
 
 impl ConversationState {
@@ -78,6 +82,8 @@ impl ConversationState {
             final_patch: None,
             consensus_ticks: 0,
             total_ticks: 0,
+            prompt_tokens: 0,
+            completion_tokens: 0,
         }
     }
 
@@ -113,6 +119,15 @@ impl ConversationState {
         self.current_turn = 0;
         self.target_region = None;
         self.final_patch = None;
+        // Reset token counters for this tick
+        self.prompt_tokens = 0;
+        self.completion_tokens = 0;
+    }
+
+    /// Accumulate token usage from an LLM call.
+    pub fn add_tokens(&mut self, prompt: u32, completion: u32) {
+        self.prompt_tokens += prompt;
+        self.completion_tokens += completion;
     }
 }
 
@@ -418,9 +433,11 @@ impl ConversationRunner {
         let prompt = PromptTemplates::coordinator_select_region(puzzle_state, n);
         let response = self.call_llm(&prompt).await?;
 
-        state.add_message(AgentRole::Coordinator, response.clone(), None);
+        state.add_tokens(response.prompt_tokens, response.completion_tokens);
+        let content = response.content.trim().to_string();
+        state.add_message(AgentRole::Coordinator, content.clone(), None);
 
-        parse_coordinator_target(&response).unwrap_or(0)
+        parse_coordinator_target(&content).unwrap_or(0)
             .pipe(Ok)
     }
 
@@ -434,9 +451,11 @@ impl ConversationRunner {
         let prompt = PromptTemplates::coordinator_decide(&history, region_content, n);
         let response = self.call_llm(&prompt).await?;
 
-        state.add_message(AgentRole::Coordinator, response.clone(), state.target_region.clone());
+        state.add_tokens(response.prompt_tokens, response.completion_tokens);
+        let content = response.content.trim().to_string();
+        state.add_message(AgentRole::Coordinator, content.clone(), state.target_region.clone());
 
-        Ok(parse_coordinator_decision(&response, n))
+        Ok(parse_coordinator_decision(&content, n))
     }
 
     async fn proposer_propose(
@@ -450,9 +469,11 @@ impl ConversationRunner {
         let prompt = PromptTemplates::proposer(region_content, availability, &history, row_idx);
         let response = self.call_llm(&prompt).await?;
 
-        state.add_message(AgentRole::Proposer, response.clone(), state.target_region.clone());
+        state.add_tokens(response.prompt_tokens, response.completion_tokens);
+        let content = response.content.trim().to_string();
+        state.add_message(AgentRole::Proposer, content.clone(), state.target_region.clone());
 
-        Ok(parse_proposer_proposal(&response))
+        Ok(parse_proposer_proposal(&content))
     }
 
     async fn validator_check(
@@ -469,9 +490,11 @@ impl ConversationRunner {
             PromptTemplates::validator(region_content, &proposal, column_values, row_values);
         let response = self.call_llm(&prompt).await?;
 
-        state.add_message(AgentRole::Validator, response.clone(), state.target_region.clone());
+        state.add_tokens(response.prompt_tokens, response.completion_tokens);
+        let content = response.content.trim().to_string();
+        state.add_message(AgentRole::Validator, content.clone(), state.target_region.clone());
 
-        Ok(parse_validator_response(&response))
+        Ok(parse_validator_response(&content))
     }
 
     fn apply_value_to_row(&self, row_content: &str, pos: usize, val: u8, _n: usize) -> String {
@@ -490,14 +513,14 @@ impl ConversationRunner {
             .join(" ")
     }
 
-    async fn call_llm(&self, prompt: &str) -> Result<String> {
+    async fn call_llm(&self, prompt: &str) -> Result<LlmResponse> {
         let _permit = self.llm_semaphore.acquire().await?;
 
-        // Use generate_with_system for conversation agents - they have their own prompts
+        // Use generate_with_system_and_usage for conversation agents to track token usage
         // Default temperature/top_p for conversation-style responses
         let response = self
             .client
-            .generate_with_system(
+            .generate_with_system_and_usage(
                 &self.model,
                 "You are a collaborative agent solving Latin Square puzzles. Follow the instructions precisely and respond in the exact format requested.",
                 prompt,
@@ -508,7 +531,7 @@ impl ConversationRunner {
             .await
             .context("LLM generation failed")?;
 
-        Ok(response.trim().to_string())
+        Ok(response)
     }
 }
 
@@ -639,5 +662,39 @@ mod tests {
         assert!(history.contains("[Coordinator]"));
         assert!(history.contains("[Proposer]"));
         assert!(history.contains("TARGET row=0"));
+    }
+
+    #[test]
+    fn test_conversation_state_token_tracking() {
+        let mut state = ConversationState::new(5);
+        assert_eq!(state.prompt_tokens, 0);
+        assert_eq!(state.completion_tokens, 0);
+
+        // Accumulate tokens from first LLM call
+        state.add_tokens(100, 50);
+        assert_eq!(state.prompt_tokens, 100);
+        assert_eq!(state.completion_tokens, 50);
+
+        // Accumulate tokens from second LLM call
+        state.add_tokens(200, 100);
+        assert_eq!(state.prompt_tokens, 300);
+        assert_eq!(state.completion_tokens, 150);
+    }
+
+    #[test]
+    fn test_conversation_state_reset_clears_tokens() {
+        let mut state = ConversationState::new(5);
+        state.add_tokens(500, 250);
+        state.consensus_ticks = 1;
+        state.total_ticks = 3;
+
+        // Reset should clear tokens but preserve tick stats
+        state.reset_for_tick();
+
+        assert_eq!(state.prompt_tokens, 0);
+        assert_eq!(state.completion_tokens, 0);
+        // Stats should be preserved
+        assert_eq!(state.consensus_ticks, 1);
+        assert_eq!(state.total_ticks, 3);
     }
 }

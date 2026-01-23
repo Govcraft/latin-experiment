@@ -293,7 +293,6 @@ impl ExperimentRunner {
             }
 
             // Handle Conversation strategy separately (different flow)
-            // TODO: Add token tracking to ConversationRunner when available
             let (patches_applied, messages_this_tick, tick_prompt_tokens, tick_completion_tokens, tick_rejections, tick_model) = if strategy == Strategy::Conversation {
                 let runner = conversation_runner.as_ref().unwrap();
                 let (patch_opt, conv_state) = runner.run_tick(&artifact, &shared_grid).await?;
@@ -360,19 +359,17 @@ impl ExperimentRunner {
                     }
                 }
 
-                // Conversation token tracking: estimate from message count
-                // Each message ≈ 100 tokens prompt + 50 tokens completion (rough estimate)
-                // TODO: Get actual tokens from ConversationRunner when available
-                let estimated_prompt_tokens = (messages_count as u32) * 100;
-                let estimated_completion_tokens = (messages_count as u32) * 50;
-                total_prompt_tokens += estimated_prompt_tokens;
-                total_completion_tokens += estimated_completion_tokens;
+                // Use actual token counts from ConversationState
+                let tick_prompt_tokens = conv_state.prompt_tokens;
+                let tick_completion_tokens = conv_state.completion_tokens;
+                total_prompt_tokens += tick_prompt_tokens;
+                total_completion_tokens += tick_completion_tokens;
 
                 for (reason, count) in &tick_rejections {
                     *total_patch_rejections.entry(*reason).or_insert(0) += count;
                 }
 
-                (applied, Some(messages_count), estimated_prompt_tokens, estimated_completion_tokens, tick_rejections, conv_model)
+                (applied, Some(messages_count), tick_prompt_tokens, tick_completion_tokens, tick_rejections, conv_model)
             } else {
                 // Standard strategies: PressureField, Sequential, Random, Hierarchical
                 let region_id = match strategy {
