@@ -157,7 +157,7 @@
 
 \begin{document}
 
-\title{Emergent Coordination in Multi-Agent Systems\\via Pressure Fields and Temporal Decay\footnote{Code available at \url{https://github.com/Govcraft/schedule-experiment}}}
+\title{Emergent Coordination in Multi-Agent Systems\\via Pressure Fields and Temporal Decay\footnote{Code available at \url{https://github.com/Govcraft/pressure-field-experiment}}}
 
 \author{Roland R. Rodriguez, Jr.\\[0.3em]
 \small Independent Researcher\\
@@ -240,7 +240,7 @@ Pressure-field coordination satisfies De Wolf and Holvoet's~\cite{dewolf2005engi
 
 No external controller exists---agents observe and act autonomously based on local pressure signals. Coordination emerges from local decisions: agents reduce regional pressure through greedy actions, and global coordination arises from shared artifact state. Temporal decay provides dynamic adaptation---fitness erodes continuously, preventing premature convergence and enabling continued refinement.
 
-The theoretical contribution formalizes this intuition through potential game theory. Theorem~1 establishes convergence guarantees for aligned pressure systems; the Basin Separation result (Theorem~3) explains why decay is necessary to escape suboptimal basins.
+The theoretical contribution formalizes this intuition through potential game theory. Theorem~\ref{thm:convergence} establishes convergence guarantees for aligned pressure systems; the Basin Separation result (Theorem~\ref{thm:basin-separation}) explains why decay is necessary to escape suboptimal basins.
 
 \subsubsection{Foundation Model Enablement}
 
@@ -467,6 +467,7 @@ We establish three main results: (1) convergence to stable basins under alignmen
 \subsection{Convergence Under Alignment}
 
 \begin{theorem}[Convergence]
+\label{thm:convergence}
 Let the pressure system be aligned with $\epsilon$-bounded coupling. Let $\delta_{\min} > 0$ be the minimum \emph{local} pressure reduction $P_i(s) - P_i(s')$ from any applied patch, and assume $\delta_{\min} > (n-1)\epsilon$ where $n$ is the number of regions. Then from any initial state $s_0$ with pressure $P_0 = P(s_0)$, the system reaches a stable basin within:
 \[
 T \leq \frac{P_0}{\delta_{\min} - (n-1)\epsilon}
@@ -481,6 +482,7 @@ The bound is loose but establishes the key property: convergence time scales wit
 \subsection{Basin Quality}
 
 \begin{theorem}[Basin Quality]
+\label{thm:basin-quality}
 In any stable basin $s^*$, the artifact pressure satisfies:
 \[
 P(s^*) < n \cdot \tau_{\text{act}}
@@ -493,6 +495,7 @@ where $n$ is the number of regions and $\tau_{\text{act}}$ is the activation thr
 This bound is tight: adversarial initial conditions can place the system in a basin where each region has pressure just below threshold. However, in practice, actors typically reduce pressure well below $\tau_{\text{act}}$, yielding much lower basin pressures.
 
 \begin{theorem}[Basin Separation]
+\label{thm:basin-separation}
 Under separable pressure (zero coupling), distinct stable basins are separated by pressure barriers of height at least $\tau_{\text{act}}$.
 \end{theorem}
 
@@ -503,6 +506,7 @@ This explains why decay is necessary: without decay, the system can become trapp
 \subsection{Scaling Properties}
 
 \begin{theorem}[Linear Scaling]
+\label{thm:linear-scaling}
 Let $m$ be the number of regions and $n$ be the number of parallel agents. The per-tick complexity is:
 \begin{itemize}
 \item \textbf{Signal computation:} $O(m \cdot d)$ where $d$ is signal dimension
@@ -517,7 +521,8 @@ Total: $O(m \cdot (d + k + a \cdot \log(ma)))$, independent of agent count $n$.
 The key observation: adding agents increases throughput (more patches proposed per tick) without increasing coordination cost. This contrasts with hierarchical schemes where coordination overhead grows with agent count.
 
 \begin{theorem}[Parallel Convergence]
-Under the same alignment conditions as Theorem~1, with $K$ patches validated in parallel per tick where patches affect disjoint regions, the system reaches a stable basin within:
+\label{thm:parallel-convergence}
+Under the same alignment conditions as Theorem~\ref{thm:convergence}, with $K$ patches validated in parallel per tick where patches affect disjoint regions, the system reaches a stable basin within:
 \[
 T \leq \frac{P_0}{K \cdot (\delta_{\min} - (n-1)\epsilon)}
 \]
@@ -563,7 +568,7 @@ Pressure-field coordination achieves $O(1)$ coordination overhead because agents
 
 We evaluate pressure-field coordination on meeting room scheduling: assigning $N$ meetings to $R$ rooms over $D$ days to minimize gaps (unscheduled time), overlaps (attendee double-bookings), and maximize utilization balance. This domain provides continuous pressure gradients (rather than discrete violations), measurable success criteria, and scalable difficulty through problem size.
 
-\textbf{Key findings}: Pressure-field coordination substantially outperforms all baselines (\S5.2). Temporal decay is critical---disabling it reduces solve rate by 10 percentage points (\S5.3). The approach maintains consistent performance from 1 to 4 agents (\S5.4).
+\textbf{Key findings}: Pressure-field coordination substantially outperforms all baselines (\S\ref{sec:main-results}). Temporal decay is critical---disabling it reduces solve rate by 10 percentage points (\S\ref{sec:ablations}). The approach maintains consistent performance from 1 to 4 agents (\S\ref{sec:scaling}).
 
 \subsection{Setup}
 
@@ -587,7 +592,7 @@ Hard & 5 & 60 & 30\% \\
 \label{tab:problems}
 \end{table}
 
-Each schedule spans 5 days with 30-minute time slots (8am--4pm). Regions are 2-hour time blocks (20 regions per schedule). A problem is ``solved'' when all meetings are scheduled with zero attendee overlaps within 50 ticks.
+Each schedule spans 5 days with 30-minute time slots (8am--4pm). Regions are 2-hour time blocks (4 blocks per day $\times$ 5 days = 20 regions per schedule). A problem is ``solved'' when all meetings are scheduled with zero attendee overlaps within 50 ticks.
 
 \textbf{Pressure function}: $P = \text{gaps} \cdot 1.0 + \text{overlaps} \cdot 2.0 + \text{util\_var} \cdot 0.5 + \text{unsched} \cdot 1.5$
 
@@ -628,6 +633,7 @@ We compare five coordination strategies, all using identical \acp{llm} (\texttt{
 \textbf{Model escalation}: After exhausting all bands with zero progress (21 ticks total), the system escalates through the model chain: 0.5b $\to$ 1.5b $\to$ 3b, resetting to Exploitation band. Section~\ref{sec:escalation} analyzes this mechanism.
 
 \subsection{Main Results}
+\label{sec:main-results}
 
 Across 1350 total trials spanning three difficulty levels (easy, medium, hard) and agent counts (1, 2, 4), we find that pressure-field coordination substantially outperforms all baselines:
 
@@ -667,6 +673,7 @@ This result contradicts the common assumption that explicit hierarchical coordin
 \end{figure}
 
 \subsection{Ablations}
+\label{sec:ablations}
 
 \subsubsection{Effect of Temporal Decay}
 
@@ -687,7 +694,7 @@ Without decay & 26/30 & 86.7\% & 70.3\%--94.7\% \\
 \label{tab:decay-ablation}
 \end{table}
 
-The effect is meaningful: disabling decay reduces solve rate from 96.7\% to 86.7\%. Without decay, fitness saturates after initial patches---regions that received early patches retain high fitness indefinitely, making them appear ``stable'' even when they still contain unscheduled meetings. Since greedy selection prioritizes high-pressure regions, these prematurely-stabilized regions are never reconsidered. This validates our theoretical analysis: Theorem~3 establishes that stable basins are separated by pressure barriers, and decay is necessary to escape these barriers and discover lower-pressure basins.
+The effect is meaningful: disabling decay reduces solve rate from 96.7\% to 86.7\%. Without decay, fitness saturates after initial patches---regions that received early patches retain high fitness indefinitely, making them appear ``stable'' even when they still contain unscheduled meetings. Since greedy selection prioritizes high-pressure regions, these prematurely-stabilized regions are never reconsidered. This validates the Basin Separation result (Theorem~\ref{thm:basin-separation}): without decay, agents remain trapped in the first stable basin they reach, even if lower-pressure basins exist elsewhere in the landscape.
 
 \subsubsection{Effect of Inhibition and Examples}
 
@@ -743,6 +750,7 @@ Unlike the ``AVOID'' framing that small models (1.5B parameters) struggle to fol
 Negative pheromones decay at the same rate as positive examples ($\text{weight} \times 0.95$ per tick, evicted below 0.1), ensuring that old failures don't permanently block valid approaches. Up to 3 recent rejections per region are included in prompts as ``Hints for better scheduling.''
 
 \subsection{Scaling Experiments}
+\label{sec:scaling}
 
 Pressure-field maintains consistent performance from 1 to 4 agents on easy difficulty:
 
@@ -762,7 +770,7 @@ Pressure-field maintains consistent performance from 1 to 4 agents on easy diffi
 \label{tab:scaling}
 \end{table}
 
-The key observation is \emph{robustness}: pressure-field coordination maintains consistent solve rates despite 4$\times$ variation in agent count. This validates Theorem~4: coordination overhead remains $O(1)$, enabling effective scaling. The slight peak at 2 agents (93.3\%) is within \ac{ci} overlap of 1 and 4 agents, indicating no significant agent-count effect.
+The key observation is \emph{robustness}: pressure-field coordination maintains consistent solve rates despite 4$\times$ variation in agent count. This validates Theorem~\ref{thm:linear-scaling}: coordination overhead remains $O(1)$, enabling effective scaling. The slight peak at 2 agents (93.3\%) is within \ac{ci} overlap of 1 and 4 agents, indicating no significant agent-count effect.
 
 \subsection{Band and Model Escalation}
 \label{sec:escalation}
@@ -850,7 +858,7 @@ Hierarchical & 40.0 (n=4) & --- & --- \\
 \label{tab:convergence}
 \end{table}
 
-On easy problems, pressure-field solves 1.7$\times$ faster than conversation and 2.2$\times$ faster than hierarchical. Notably, pressure-field's convergence speed on hard problems (32.3 ticks) is comparable to medium problems (34.6 ticks)---the hard problems that \emph{do} get solved converge at similar rates, suggesting that solvability rather than convergence speed is the limiting factor on difficult problems.
+On easy problems, pressure-field solves 1.7$\times$ faster than conversation and 2.2$\times$ faster than hierarchical. Notably, pressure-field's convergence speed on hard problems (32.3 ticks) is comparable to medium problems (34.6 ticks)---the hard problems that \emph{do} get solved converge at similar rates, suggesting that solvability rather than convergence speed is the limiting factor on difficult problems. This bimodal pattern---fast convergence when solvable, complete failure otherwise---suggests that model capability rather than search time is the limiting factor on hard problems.
 
 \begin{figure}[htbp]
 \centering
@@ -1122,6 +1130,8 @@ Output the schedule for this time block.
 
 \textbf{Why ``one patch per tick'' for hierarchical?} This asymmetry is inherent to the coordination paradigm, not an implementation choice. Hierarchical control requires the manager to: (1) observe global state, (2) select a target region, (3) delegate to a worker, (4) receive the proposed patch, and (5) validate before applying. Delegating to $K$ workers simultaneously would require additional coordination protocols---work distribution to avoid conflicts, result aggregation, tie-breaking when multiple patches target overlapping state---that would transform hierarchical control into a fundamentally different architecture. The sequential bottleneck is the cost of centralized decision-making. Pressure-field avoids this overhead through stigmergic coordination: agents observe shared state independently and propose patches without central delegation, enabling natural parallelism.
 
+\textbf{Conversation baseline implementation} The conversation baseline implements AutoGen-style multi-agent dialogue with three roles: a \emph{Coordinator} that selects which region to address, a \emph{Proposer} that suggests schedule changes, and a \emph{Validator} that critiques proposals. Each tick proceeds as follows: (1) the Coordinator identifies a high-pressure region (1 \ac{llm} call), (2) the Proposer and Validator engage in up to 5 dialogue turns (2 calls per turn), (3) if the Validator approves, the patch is applied. This yields 4--12 \ac{llm} calls per tick for a single region, compared to pressure-field's $K$ parallel calls across $K$ regions. The conversation terminates when the Validator approves or the turn limit is reached. We use fixed sampling parameters (T=0.3, top-p=0.9) for structured dialogue, lower than pressure-field's exploration bands.
+
 \subsection{Problem Generation and Seeding}
 
 Fair strategy comparison requires identical problem instances: each strategy must face the same scheduling challenge within a trial. We achieve this through deterministic seeding.
@@ -1203,7 +1213,7 @@ Each experiment records:
 \item \texttt{band\_escalation\_events}: Sampling band changes (tick, from\_band, to\_band)
 \item \texttt{model\_escalation\_events}: Model tier changes (tick, from\_model, to\_model)
 \item \texttt{final\_model}: Which model tier solved the schedule
-\item \texttt{token\_usage}: Prompt and completion tokens consumed
+\item \texttt{token\_usage}: Prompt and completion tokens consumed (pressure-field only; conversation baseline uses a different LLM client path that does not collect token statistics, precluding cross-strategy comparison)
 \end{itemize}
 
 \subsection{Replication Notes}

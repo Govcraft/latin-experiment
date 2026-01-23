@@ -1,6 +1,6 @@
 # Pressure-Field Coordination Paper - Build System
 
-MAIN = main
+MAIN = rodriguez-pressure-field-coordination-2026
 LATEX = pdflatex
 BIBTEX = bibtex
 
