@@ -12,7 +12,7 @@ use tracing_subscriber::EnvFilter;
 use schedule_experiment::ScheduleGenerator;
 use schedule_experiment::experiment::{ExperimentRunner, ExperimentRunnerConfig, Strategy};
 use schedule_experiment::generator::ScheduleGeneratorConfig;
-use schedule_experiment::results::{ExperimentResult, GridResults};
+use schedule_experiment::results::GridResults;
 use survival_kernel::artifact::Artifact;
 
 #[derive(Parser)]
@@ -288,7 +288,11 @@ async fn main() -> Result<()> {
                 "Starting grid experiment"
             );
 
-            let mut results: Vec<ExperimentResult> = Vec::new();
+            // Create output directory upfront
+            std::fs::create_dir_all(output.parent().unwrap_or(&PathBuf::from(".")))?;
+
+            // Initialize GridResults for incremental saves
+            let mut grid_results = GridResults::new();
 
             for difficulty in &difficulty_names {
                 let generator_config = parse_difficulty(difficulty);
@@ -332,18 +336,15 @@ async fn main() -> Result<()> {
                                 result.final_pressure
                             );
 
-                            results.push(result);
+                            // Add result and save incrementally
+                            grid_results.add(result);
+                            grid_results.compute_summary();
+                            let json = serde_json::to_string_pretty(&grid_results)?;
+                            std::fs::write(&output, json)?;
                         }
                     }
                 }
             }
-
-            // Create GridResults and save
-            let mut grid_results = GridResults::new();
-            for result in results {
-                grid_results.add(result);
-            }
-            grid_results.compute_summary();
 
             println!("\n=== Grid Results Summary ===");
             for (key, summary) in &grid_results.summary {
@@ -358,9 +359,6 @@ async fn main() -> Result<()> {
                 );
             }
 
-            let json = serde_json::to_string_pretty(&grid_results)?;
-            std::fs::create_dir_all(output.parent().unwrap_or(&PathBuf::from(".")))?;
-            std::fs::write(&output, json)?;
             println!("\nResults written to: {}", output.display());
         }
 
@@ -399,7 +397,11 @@ async fn main() -> Result<()> {
                 "Starting ablation study"
             );
 
-            let mut results: Vec<ExperimentResult> = Vec::new();
+            // Create output directory upfront
+            std::fs::create_dir_all(output.parent().unwrap_or(&PathBuf::from(".")))?;
+
+            // Initialize GridResults for incremental saves
+            let mut grid_results = GridResults::new();
 
             for (decay, inhibition, examples, name) in &ablation_configs {
                 info!(
@@ -435,16 +437,13 @@ async fn main() -> Result<()> {
                         name, trial, result.solved, result.total_ticks, result.final_pressure
                     );
 
-                    results.push(result);
+                    // Add result and save incrementally
+                    grid_results.add(result);
+                    grid_results.compute_summary();
+                    let json = serde_json::to_string_pretty(&grid_results)?;
+                    std::fs::write(&output, json)?;
                 }
             }
-
-            // Create GridResults and save
-            let mut grid_results = GridResults::new();
-            for result in results {
-                grid_results.add(result);
-            }
-            grid_results.compute_summary();
 
             println!("\n=== Ablation Results Summary ===");
             for (key, summary) in &grid_results.summary {
@@ -456,9 +455,6 @@ async fn main() -> Result<()> {
                 );
             }
 
-            let json = serde_json::to_string_pretty(&grid_results)?;
-            std::fs::create_dir_all(output.parent().unwrap_or(&PathBuf::from(".")))?;
-            std::fs::write(&output, json)?;
             println!("\nResults written to: {}", output.display());
         }
     }
