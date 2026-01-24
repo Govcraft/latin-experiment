@@ -958,6 +958,8 @@ impl ExperimentRunner {
         let mut total_messages: usize = 0;
         let mut consensus_ticks: usize = 0;
         let mut total_turns_to_consensus: usize = 0;
+        let mut total_prompt_tokens: u32 = 0;
+        let mut total_completion_tokens: u32 = 0;
 
         // Initial measurement
         let initial_pressure =
@@ -982,6 +984,8 @@ impl ExperimentRunner {
 
             let messages_this_tick = state.total_messages();
             total_messages += messages_this_tick;
+            total_prompt_tokens += state.prompt_tokens;
+            total_completion_tokens += state.completion_tokens;
 
             if state.final_patch.is_some() {
                 consensus_ticks += 1;
@@ -1068,8 +1072,8 @@ impl ExperimentRunner {
                 llm_calls: messages_this_tick, // Each message = 1 LLM call
                 duration_ms: tick_duration.as_millis() as u64,
                 model_used: current_model.clone(),
-                prompt_tokens: 0, // Could track via runner if needed
-                completion_tokens: 0,
+                prompt_tokens: state.prompt_tokens,
+                completion_tokens: state.completion_tokens,
                 patch_rejections: HashMap::new(),
                 messages_per_tick: Some(messages_this_tick),
             });
@@ -1153,8 +1157,8 @@ impl ExperimentRunner {
             escalation_events,
             band_escalation_events: Vec::new(), // Conversation doesn't use band escalation
             final_model: current_model,
-            total_prompt_tokens: 0, // Could track if needed
-            total_completion_tokens: 0,
+            total_prompt_tokens,
+            total_completion_tokens,
             total_patch_rejections: HashMap::new(),
             conversation_stats: Some(ConversationStats {
                 total_messages,
