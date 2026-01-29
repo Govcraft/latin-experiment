@@ -6,7 +6,7 @@
 
 We evaluate pressure-field coordination on meeting room scheduling: assigning $N$ meetings to $R$ rooms over $D$ days to minimize gaps (unscheduled time), overlaps (attendee double-bookings), and maximize utilization balance. This domain provides continuous pressure gradients (rather than discrete violations), measurable success criteria, and scalable difficulty through problem size.
 
-\textbf{Key findings}: Pressure-field coordination outperforms all baselines (\S\ref{sec:main-results}). Temporal decay is critical---disabling it reduces solve rate by 10 percentage points (\S\ref{sec:ablations}). The approach maintains consistent performance from 1 to 4 agents (\S\ref{sec:scaling}).
+\textbf{Key findings}: Pressure-field coordination outperforms all baselines (\S\ref{sec:main-results}). Temporal decay is critical---disabling it reduces solve rate by 10 percentage points (\S\ref{sec:ablations}). The approach maintains consistent performance from 1 to 4 agents (\S\ref{sec:scaling}). Despite using more tokens per trial, pressure-field achieves 12\% better token efficiency per successful solve (\S\ref{sec:token-efficiency}).
 
 \subsection{Setup}
 
@@ -60,6 +60,7 @@ We compare five coordination strategies, all using identical \acp{llm} (\texttt{
 \item \textbf{Solve rate}: Percentage of schedules reaching all meetings placed with zero overlaps within 50 ticks.
 \item \textbf{Ticks to solve}: Convergence speed for solved cases
 \item \textbf{Final pressure}: Remaining gaps, overlaps, and unscheduled meetings for unsolved cases
+\item \textbf{Token efficiency}: Total prompt and completion tokens consumed per trial and per successful solve
 \end{itemize}
 
 \subsubsection{Implementation}
@@ -83,7 +84,7 @@ Across 1350 total trials spanning three difficulty levels (easy, medium, hard) a
 \textbf{Strategy} & \textbf{Solved/N} & \textbf{Rate} & \textbf{95\% Wilson \acs{ci}} \\
 \midrule
 Pressure-field & 131/270 & 48.5\% & 42.6\%--54.5\% \\
-Conversation & 26/270 & 9.6\% & 6.7\%--13.7\% \\
+Conversation & 30/270 & 11.1\% & 7.9\%--15.4\% \\
 Hierarchical & 4/270 & 1.5\% & 0.6\%--3.7\% \\
 Sequential & 1/270 & 0.4\% & 0.1\%--2.1\% \\
 Random & 1/270 & 0.4\% & 0.1\%--2.1\% \\
@@ -95,9 +96,9 @@ Random & 1/270 & 0.4\% & 0.1\%--2.1\% \\
 
 The results show clear stratification:
 
-\textbf{Pressure-field dominates}: Pressure-field achieves 48.5\% solve rate, roughly 5$\times$ higher than the next-best baseline (conversation at 9.6\%). The effect size is large: Cohen's $h = 1.26$ versus conversation on easy problems, and $h > 1.97$ versus all other baselines.
+\textbf{Pressure-field dominates}: Pressure-field achieves 48.5\% solve rate, roughly 4$\times$ higher than the next-best baseline (conversation at 11.1\%). The effect size is large: Cohen's $h = 1.16$ versus conversation on easy problems, and $h > 1.97$ versus all other baselines.
 
-\textbf{Conversation provides intermediate performance}: The AutoGen-style conversation baseline achieves 9.6\% overall, significantly better than hierarchical ($p < 0.001$) but far below pressure-field. Notably, conversation solves only easy problems (28.9\% on easy, 0\% on medium and hard).
+\textbf{Conversation provides intermediate performance}: The AutoGen-style conversation baseline achieves 11.1\% overall, significantly better than hierarchical ($p < 0.001$) but far below pressure-field. Notably, conversation solves only easy problems (33.3\% on easy, 0\% on medium and hard).
 
 \textbf{Hierarchical and sequential fail}: Despite explicit coordination, hierarchical control achieves only 1.5\% solve rate---comparable to random (0.4\%). Both strategies fail entirely on medium and hard problems.
 
@@ -248,11 +249,11 @@ Performance varies across difficulty levels, revealing the unique strength of pr
 \toprule
 \textbf{Difficulty} & \textbf{Pressure-field} & \textbf{Conversation} & \textbf{Hierarchical} & \textbf{Sequential/Random} \\
 \midrule
-Easy & 86.7\% (78/90) & 28.9\% (26/90) & 4.4\% (4/90) & 1.1\% (1/90) \\
+Easy & 86.7\% (78/90) & 33.3\% (30/90) & 4.4\% (4/90) & 1.1\% (1/90) \\
 Medium & 43.3\% (39/90) & 0.0\% (0/90) & 0.0\% (0/90) & 0.0\% (0/90) \\
 Hard & 15.6\% (14/90) & 0.0\% (0/90) & 0.0\% (0/90) & 0.0\% (0/90) \\
 \midrule
-\textbf{Total} & \textbf{48.5\%} (131/270) & \textbf{9.6\%} (26/270) & \textbf{1.5\%} (4/270) & \textbf{0.4\%} (1/270) \\
+\textbf{Total} & \textbf{48.5\%} (131/270) & \textbf{11.1\%} (30/270) & \textbf{1.5\%} (4/270) & \textbf{0.4\%} (1/270) \\
 \bottomrule
 \end{tabular}
 \caption{Solve rate by difficulty level (90 trials each per difficulty, 270 per strategy total). Only pressure-field solves medium and hard problems. See Table~\ref{tab:main-results} for confidence intervals.}
@@ -264,15 +265,15 @@ The difficulty scaling reveals critical insights:
 \begin{enumerate}
 \item \textbf{Pressure-field is the only strategy that scales}: While all strategies degrade on harder problems, pressure-field maintains meaningful solve rates (43.3\% medium, 15.6\% hard) where all baselines achieve 0\%.
 
-\item \textbf{The gap widens with difficulty}: On easy problems, pressure-field leads by 57.8 percentage points over conversation (86.7\% vs 28.9\%). On medium and hard problems, the gap becomes absolute---pressure-field solves problems that no baseline can solve.
+\item \textbf{The gap widens with difficulty}: On easy problems, pressure-field leads by 53.4 percentage points over conversation (86.7\% vs 33.3\%). On medium and hard problems, the gap becomes absolute---pressure-field solves problems that no baseline can solve.
 
-\item \textbf{Effect sizes are large}: Cohen's $h$ on easy problems: $h = 1.26$ vs conversation, $h = 1.97$ vs hierarchical, $h = 2.18$ vs sequential/random.
+\item \textbf{Effect sizes are large}: Cohen's $h$ on easy problems: $h = 1.16$ vs conversation, $h = 1.97$ vs hierarchical, $h = 2.18$ vs sequential/random.
 \end{enumerate}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\textwidth]{fig3_effect_sizes.pdf}
-\caption{Effect sizes (Cohen's $h$) for pressure-field versus each baseline on easy problems. The dashed line indicates the ``large effect'' threshold ($h = 0.8$). All comparisons exceed this threshold, with effects ranging from $h = 1.26$ (vs conversation) to $h = 2.18$ (vs sequential/random).}
+\caption{Effect sizes (Cohen's $h$) for pressure-field versus each baseline on easy problems. The dashed line indicates the ``large effect'' threshold ($h = 0.8$). All comparisons exceed this threshold, with effects ranging from $h = 1.16$ (vs conversation) to $h = 2.18$ (vs sequential/random).}
 \label{fig:effect-sizes}
 \end{figure}
 
@@ -288,7 +289,7 @@ For solved cases, pressure-field converges faster than baselines on easy problem
 \textbf{Strategy} & \textbf{Easy} & \textbf{Medium} & \textbf{Hard} \\
 \midrule
 Pressure-field & 17.8 (n=78) & 34.6 (n=39) & 32.3 (n=14) \\
-Conversation & 30.4 (n=26) & --- & --- \\
+Conversation & 29.4 (n=30) & --- & --- \\
 Hierarchical & 40.0 (n=4) & --- & --- \\
 \bottomrule
 \end{tabular}
@@ -296,12 +297,12 @@ Hierarchical & 40.0 (n=4) & --- & --- \\
 \label{tab:convergence}
 \end{table}
 
-On easy problems, pressure-field solves 1.7$\times$ faster than conversation and 2.2$\times$ faster than hierarchical. Notably, pressure-field's convergence speed on hard problems (32.3 ticks) is comparable to medium problems (34.6 ticks)---the hard problems that \emph{do} get solved converge at similar rates, suggesting that solvability rather than convergence speed is the limiting factor on difficult problems. This bimodal pattern---fast convergence when solvable, complete failure otherwise---suggests that model capability rather than search time is the limiting factor on hard problems.
+On easy problems, pressure-field solves 1.65$\times$ faster than conversation and 2.2$\times$ faster than hierarchical. Notably, pressure-field's convergence speed on hard problems (32.3 ticks) is comparable to medium problems (34.6 ticks)---the hard problems that \emph{do} get solved converge at similar rates, suggesting that solvability rather than convergence speed is the limiting factor on difficult problems. This bimodal pattern---fast convergence when solvable, complete failure otherwise---suggests that model capability rather than search time is the limiting factor on hard problems.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.65\textwidth]{fig4_efficiency.pdf}
-\caption{Mean ticks to solution on easy problems (solved cases only). Error bars show standard error. Pressure-field converges fastest (17.8 ticks), followed by conversation (30.4 ticks) and hierarchical (40.0 ticks).}
+\caption{Mean ticks to solution on easy problems (solved cases only). Error bars show standard error. Pressure-field converges fastest (17.8 ticks), followed by conversation (29.4 ticks) and hierarchical (40.0 ticks).}
 \label{fig:efficiency}
 \end{figure}
 
@@ -317,7 +318,7 @@ For both solved and unsolved cases, final pressure reveals solution quality:
 \textbf{Strategy} & \textbf{Easy} & \textbf{Medium} & \textbf{Hard} \\
 \midrule
 Pressure-field & 0.13 & 1.02 & 2.48 \\
-Conversation & 26.3 & 58.2 & 89.9 \\
+Conversation & 26.5 & 59.3 & 92.2 \\
 Hierarchical & 28.6 & 59.4 & 88.0 \\
 \bottomrule
 \end{tabular}
@@ -326,3 +327,64 @@ Hierarchical & 28.6 & 59.4 & 88.0 \\
 \end{table}
 
 Pressure-field achieves 200$\times$ lower final pressure on easy, 57$\times$ lower on medium, and 35$\times$ lower on hard problems compared to conversation and hierarchical baselines. Even when pressure-field does not fully solve a problem, it achieves much better partial solutions.
+
+\subsection{Token Efficiency}
+\label{sec:token-efficiency}
+
+A natural question is whether pressure-field's superior solve rate comes at the cost of increased \ac{llm} usage. We tracked token consumption across all strategies:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Strategy} & \textbf{Prompt} & \textbf{Completion} & \textbf{Total} \\
+\midrule
+Pressure-field & 532,106 & 85,165 & 617,271 \\
+Conversation & 154,845 & 6,626 & 161,472 \\
+Hierarchical & 32,662 & 5,424 & 38,087 \\
+Sequential & 40,667 & 5,239 & 45,906 \\
+Random & 41,227 & 5,253 & 46,480 \\
+\bottomrule
+\end{tabular}
+\caption{Average token usage per trial. Pressure-field uses more tokens per trial due to parallel multi-agent execution.}
+\label{tab:tokens-per-trial}
+\end{table}
+
+At first glance, pressure-field appears expensive: 617K tokens per trial versus conversation's 161K---roughly 4$\times$ higher. However, this raw comparison ignores \emph{success rate}. The relevant metric for practical deployment is \textbf{tokens per successful solve}:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Strategy} & \textbf{Total Tokens} & \textbf{Solves} & \textbf{Tokens/Solve} \\
+\midrule
+Pressure-field & 166.7M & 131 & 1.27M \\
+Conversation & 43.6M & 30 & 1.45M \\
+\bottomrule
+\end{tabular}
+\caption{Token efficiency per successful solve (270 trials each). Despite higher per-trial cost, pressure-field achieves lower cost per solve due to its superior success rate.}
+\label{tab:tokens-per-solve}
+\end{table}
+
+Pressure-field requires 1.27M tokens per solve versus conversation's 1.45M---\textbf{12\% more efficient} per successful outcome. The apparent cost disadvantage inverts when accounting for success rate.
+
+Token usage also varies by outcome:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Strategy} & \textbf{Solved Trials} & \textbf{Unsolved Trials} \\
+\midrule
+Pressure-field & 318K (n=131) & 900K (n=139) \\
+Conversation & 78K (n=30) & 172K (n=240) \\
+\bottomrule
+\end{tabular}
+\caption{Average tokens by outcome. Both strategies use fewer tokens on solved trials (early termination), but pressure-field's unsolved trials are more expensive due to sustained parallel exploration.}
+\label{tab:tokens-by-outcome}
+\end{table}
+
+Solved trials terminate early, using fewer tokens. For pressure-field, the 2.8$\times$ gap between solved (318K) and unsolved (900K) reflects the cost of exhaustive exploration when a problem proves intractable. Conversation's smaller gap (2.2$\times$) indicates less intensive search---which may explain its lower solve rate on difficult problems.
