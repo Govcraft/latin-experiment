@@ -1,0 +1,14 @@
+{
+  "combined_at": "2026-01-15 07:59:12",
+  "source_directories": ["20260115-055818", "20260115-071439", "20260115-083012", "20260115-094712", "20260115-110643", "20260115-122323"],
+  "runs": 6,
+  "experiments": ["main-grid", "scaling", "difficulty-easy", "difficulty-hard", "escalation-with", "escalation-without"],
+  "result_counts": {
+    "main-grid": 540,
+    "scaling": 720,
+    "difficulty-easy": 180,
+    "difficulty-hard": 180,
+    "escalation-with": 180,
+    "escalation-without": 180
+  }
+}
