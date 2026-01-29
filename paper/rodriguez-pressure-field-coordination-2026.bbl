@@ -1,0 +1,95 @@
+\begin{thebibliography}{19}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{{#1}}
+\providecommand{\urlprefix}{URL }
+\providecommand{\doi}[1]{\url{https://doi.org/#1}}
+\providecommand{\eprint}[2][]{\url{#2}}
+ \bibcommenthead
+
+\bibitem[{Cohen and Levesque(1991)}]{cohen1991teamwork}
+Cohen PR, Levesque HJ (1991) Teamwork. No\^{u}s 25(4):487--512. Special Issue
+  on Cognitive Science and Artificial Intelligence
+
+\bibitem[{{CrewAI}(2024)}]{crewai2024}
+{CrewAI} (2024) Framework for orchestrating role-playing, autonomous {AI}
+  agents. \url{https://github.com/crewAIInc/crewAI}
+
+\bibitem[{De~Wolf and Holvoet(2005)}]{dewolf2005engineering}
+De~Wolf T, Holvoet T (2005) Towards a methodology for engineering
+  self-organising emergent systems. In: Self-Organization and Autonomic
+  Informatics (I). IOS Press
+
+\bibitem[{Decker and Lesser(1995)}]{decker1995gpgp}
+Decker K, Lesser V (1995) Designing a family of coordination algorithms. In:
+  Proceedings of the First International Conference on Multi-Agent Systems
+  (ICMAS-95), pp 73--80
+
+\bibitem[{Dignum(2009)}]{dignum2009handbook}
+Dignum V (ed)  (2009) Handbook of Research on Multi-Agent Systems: Semantics
+  and Dynamics of Organizational Models. IGI Global
+
+\bibitem[{Dorigo and Gambardella(1997)}]{dorigo1997acs}
+Dorigo M, Gambardella LM (1997) Ant colony system: A cooperative learning
+  approach to the traveling salesman problem. IEEE Transactions on Evolutionary
+  Computation 1(1):53--66
+
+\bibitem[{Dorigo et~al(1996)Dorigo, Maniezzo, and Colorni}]{dorigo1996ant}
+Dorigo M, Maniezzo V, Colorni A (1996) Ant system: Optimization by a colony of
+  cooperating agents. IEEE Transactions on Systems, Man, and Cybernetics --
+  Part B 26(1):29--41
+
+\bibitem[{Grass{\'e}(1959)}]{grasse1959stigmergie}
+Grass{\'e} PP (1959) La reconstruction du nid et les coordinations
+  interindividuelles chez {Bellicositermes natalensis} et {Cubitermes} sp. la
+  th{\'e}orie de la stigmergie. Insectes Sociaux 6:41--80
+
+\bibitem[{Grosz and Kraus(1996)}]{grosz1996sharedplans}
+Grosz BJ, Kraus S (1996) Collaborative plans for complex group action.
+  Artificial Intelligence 86(2):269--357
+
+\bibitem[{Hong et~al(2023)Hong, Zhuge, Chen, Zheng, Cheng, Zhang, Wang, Wang,
+  Yau, Lin, Zhou, Ran, Xiao, Wu, and Schmidhuber}]{hong2023metagpt}
+Hong S, Zhuge M, Chen J, et~al (2023) {MetaGPT}: Meta programming for a
+  multi-agent collaborative framework. arXiv preprint arXiv:230800352
+
+\bibitem[{Horling and Lesser(2004)}]{horling2004survey}
+Horling B, Lesser V (2004) A survey of multi-agent organizational paradigms.
+  The Knowledge Engineering Review 19(4):281--316
+
+\bibitem[{Li et~al(2023)Li, Hammoud, Itani, Khizbullin, and
+  Ghanem}]{li2023camel}
+Li G, Hammoud HAAK, Itani H, et~al (2023) {CAMEL}: Communicative agents for
+  ``mind'' exploration of large language model society. In: Advances in Neural
+  Information Processing Systems (NeurIPS)
+
+\bibitem[{Malone and Crowston(1994)}]{malone1994coordination}
+Malone TW, Crowston K (1994) The interdisciplinary study of coordination. ACM
+  Computing Surveys 26(1):87--119
+
+\bibitem[{Monderer and Shapley(1996)}]{monderer1996potential}
+Monderer D, Shapley LS (1996) Potential games. Games and Economic Behavior
+  14:124--143
+
+\bibitem[{Nedi{\'c} and Ozdaglar(2009)}]{nedic2009distributed}
+Nedi{\'c} A, Ozdaglar A (2009) Distributed subgradient methods for multi-agent
+  optimization. IEEE Transactions on Automatic Control 54(1):48--61
+
+\bibitem[{Serugendo et~al(2005)Serugendo, Gleizes, and
+  Karageorgos}]{serugendo2005selforganisation}
+Serugendo GDM, Gleizes MP, Karageorgos A (2005) Self-organisation in
+  multi-agent systems. The Knowledge Engineering Review 20(2):165--189
+
+\bibitem[{Shoham and Leyton-Brown(2008)}]{shoham2008multiagent}
+Shoham Y, Leyton-Brown K (2008) Multiagent Systems: Algorithmic,
+  Game-Theoretic, and Logical Foundations. Cambridge University Press
+
+\bibitem[{Wu et~al(2023)Wu, Bansal, Zhang, Wu, Zhang, Zhu, Li, Jiang, Zhang,
+  and Wang}]{wu2023autogen}
+Wu Q, Bansal G, Zhang J, et~al (2023) {AutoGen}: Enabling next-gen {LLM}
+  applications via multi-agent conversation. arXiv preprint arXiv:230808155
+
+\bibitem[{Yuan et~al(2016)Yuan, Ling, and Yin}]{yuan2016convergence}
+Yuan K, Ling Q, Yin W (2016) On the convergence of decentralized gradient
+  descent. SIAM Journal on Optimization 26(3):1835--1854
+
+\end{thebibliography}
